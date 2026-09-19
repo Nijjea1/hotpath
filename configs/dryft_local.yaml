@@ -30,7 +30,7 @@ execution: {backend: local}
 # H100 is stable and fast: measure more (tighter medians, better noise floor) and re-benchmark the
 # parent next to each candidate so nothing drifts. exclusive keeps a benchmark alone on the GPU.
 timeouts: {test: 900, bench: 1800, profile: 600, model: 240}
-benchmark: {min_speedup: 1.03, noise_multiplier: 2.0, baseline_repeats: 5, exclusive: true, rebenchmark_parent: true}
+benchmark: {min_speedup: 1.03, noise_multiplier: 2.0, baseline_repeats: 5, exclusive: true, rebenchmark_parent: true, required_workloads: [p32_b1, p32_b2, p160_b1, p160_b2], min_workload_retention: 0.98}
 
 # Beam search explores more of the tree; on a big model the wins compound (fix one bottleneck, the
 # next appears). Parallel workers are cheap (Baseten); benchmarks stay serialized (1 per GPU).

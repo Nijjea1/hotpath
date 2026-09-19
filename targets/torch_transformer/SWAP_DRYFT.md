@@ -12,14 +12,14 @@ stand-in with Dryft's real model — the Hotpath engine does not change.
 | `model.py` | **Editable.** The model + generation loop the agent optimizes. | Replace with Dryft's model. Keep it importable as `build_model()` + `generate()` (or adjust `bench.py`/`check.py` imports to match their API). |
 | `tests/reference_model.py` | **Locked.** Frozen, correct reference the agent can't touch. | Replace with Dryft's reference (or a frozen copy of their original model). |
 | `tests/check.py` | **Locked.** Defines "correct". | **Mirror Dryft's exact correctness definition** — same prompts, same greedy decode, same logit tolerance (`atol`). This is the most important file to get right; learn their definition first. |
-| `bench.py` | **Locked.** Prints `tokens_per_s` samples. | Use Dryft's workloads. Keep varied prompt lengths **and batch sizes** (their scoring uses hidden workloads — don't overfit one shape). Use `hotpath.benchlib.torch_run(..., metric="tokens_per_s")`. |
+| `bench.py` | **Locked.** Prints `tokens_per_s` samples. | Use Dryft's workloads. Keep varied prompt lengths **and batch sizes** (their scoring uses hidden workloads — don't overfit one shape). Time each shape with synchronized CUDA events and emit aggregate plus per-shape samples through `hotpath.benchlib.emit`, as the development benchmark does. |
 | `hotprofile.py` | **Locked.** torch.profiler summary. | Point it at Dryft's `generate`. On Linux/H100 CUPTI works, so device times are real (no CPU-time fallback needed). |
-| `kernels/*.py` | **Editable.** Optional hand-written/Triton kernels. | Create this dir if Dryft's model has fusable ops; add it to `editable` (already in `configs/dryft_h100.yaml`). |
+| `kernels/*.py` | **Editable.** Optional hand-written/Triton kernels. | The development model already calls `kernels/token_select.py`, and the offline sync-removal patch edits it. Replace or extend this surface for Dryft, keeping benchmark and correctness code locked. |
 
 ## Correctness is the whole game
 A change that is faster but changes the output is worthless. Before the first search:
 1. Confirm the untouched Dryft model **passes its own `check.py`** (Hotpath fails the run otherwise — by design).
-2. Confirm `bench.py` prints a clean `{"hotpath_benchmark": 1, "metric": "tokens_per_s", "samples": [...]}` line.
+2. Confirm `bench.py` prints a clean `{"hotpath_benchmark": 1, "metric": "tokens_per_s", "samples": [...], "workloads": [...]}` line. It must include the locked `p32_b1`, `p32_b2`, `p160_b1`, and `p160_b2` IDs; every row records prompt length, batch size, generated tokens, and per-shape samples.
 3. Run both by hand once: `cd targets/<dryft> && python tests/check.py && python bench.py`.
 
 ## Then
@@ -35,5 +35,8 @@ hotpath export configs/dryft_h100.yaml submission/ --ablate
   biggest launch-overhead wins — are available (they are not installable on our Windows laptop).
 - **Stable clocks → low benchmark noise**, so small real wins register instead of being rejected
   as noise. Keep `rebenchmark_parent: true` and `baseline_repeats: 5`.
+- The aggregate sample is total generated tokens divided by total synchronized elapsed time over
+  the fixed 2x2 matrix. A candidate must improve the aggregate and retain at least 98% of its
+  parent throughput for every required shape; never remove or rename a workload to hide a regression.
 - On a **bigger, compute-bound** model, KV-cache preallocation and flash attention (SDPA) pay off
   much more than on our tiny stand-in, where the model was launch-bound and prealloc was rejected.

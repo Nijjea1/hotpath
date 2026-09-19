@@ -1,13 +1,13 @@
 {
-  "idea": "Remove the .item() CPU sync from the decode loop",
-  "strategy": "gpu: remove the .item() CPU sync from the decode loop; keep the next token on device",
-  "target_file": "model.py",
-  "rationale": "argmax(...).item() forces the CPU to wait for the GPU every token, serializing the whole loop.",
+  "idea": "Remove the host token extraction CPU sync from the decode loop",
+  "strategy": "gpu: remove the token-selection CPU sync from the decode loop; keep the next token on device",
+  "target_file": "kernels/token_select.py",
+  "rationale": "argmax(...).tolist() forces the CPU to wait for the GPU every token, serializing the whole loop.",
   "risk": "low",
   "edits": [{
-    "file": "model.py",
-    "search": "        nxt = int(logits[:, -1, :].argmax(dim=-1).item())     # CPU sync every token\n        nxt_t = torch.tensor([[nxt]], device=prompt.device)\n",
-    "replace": "        nxt_t = logits[:, -1, :].argmax(dim=-1, keepdim=True)\n"
+    "file": "kernels/token_select.py",
+    "search": "    tokens = logits[:, -1, :].argmax(dim=-1).tolist()\n    return torch.tensor(tokens, device=logits.device).unsqueeze(1)\n",
+    "replace": "    return logits[:, -1, :].argmax(dim=-1, keepdim=True)\n"
   }],
-  "reasoning": "argmax with keepdim gives the (1,1) next-token tensor directly on device. Values are identical; only the host round-trip is gone."
+  "reasoning": "argmax with keepdim gives a (batch, 1) next-token tensor directly on device. Values are identical for every declared batch size; only the host round-trip is gone."
 }

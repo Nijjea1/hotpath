@@ -1,0 +1,16 @@
+# Second fully offline demo: a realistic request-analytics rollup with an O(paths * events) hotspot.
+name: slow_web_analytics
+target: ../targets/slow_web_analytics
+test_cmd: python tests/check.py
+bench_cmd: python bench.py
+profile_cmd: python hotprofile.py
+editable: ["analytics.py"]
+locked: ["tests/*", "bench.py", "hotprofile.py", "data.py"]
+timeouts: {test: 60, bench: 120, profile: 60, model: 60}
+benchmark: {min_speedup: 1.03, noise_multiplier: 2.0, baseline_repeats: 3, bootstrap_samples: 1000}
+search: {iterations: 1, candidates_per_iteration: 3, max_parallel_tests: 2, max_parallel_workers: 3, max_parallel_benchmarks: 1, max_patch_retries: 0}
+provider:
+  planner: mock
+  worker: mock
+  mock_patches_dir: ../targets/slow_web_analytics/mock_patches
+execution: {backend: local}

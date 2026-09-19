@@ -21,16 +21,17 @@ for (n1, p1), (n2, p2) in zip(model.state_dict().items(), ref.state_dict().items
     if p1.shape != p2.shape or not torch.equal(p1, p2):
         print(f"FAIL weight mismatch {n1}"); failures += 1
 
-for seed, plen, n_new in [(1, 8, 32), (2, 64, 64), (3, 1, 96), (4, 200, 16)]:
+for seed, plen, batch, n_new in [(1, 8, 1, 32), (2, 64, 1, 64), (3, 1, 1, 96),
+                                 (4, 200, 1, 16), (5, 32, 2, 32), (6, 160, 2, 16)]:
     g = torch.Generator().manual_seed(seed)
-    prompt = torch.randint(0, 256, (1, plen), generator=g).to(DEVICE)
+    prompt = torch.randint(0, 256, (batch, plen), generator=g).to(DEVICE)
     got = generate(model, prompt, n_new)
     want = ref_generate(ref, prompt, n_new)
     if got.shape != want.shape or not torch.equal(got, want):
-        first = next((i for i in range(min(got.shape[1], want.shape[1])) if got[0, i] != want[0, i]), None)
-        print(f"FAIL tokens seed={seed} plen={plen} n_new={n_new}: first divergence at {first}"); failures += 1
+        first = (got != want).nonzero(as_tuple=False)[0].tolist() if got.shape == want.shape else None
+        print(f"FAIL tokens seed={seed} batch={batch} plen={plen} n_new={n_new}: first divergence at {first}"); failures += 1
     else:
-        print(f"ok   tokens seed={seed} plen={plen} n_new={n_new}")
+        print(f"ok   tokens seed={seed} batch={batch} plen={plen} n_new={n_new}")
     lg, lw = logits_for(model, want), ref(want)
     diff = (lg - lw).abs().max().item()
     if diff > ATOL:

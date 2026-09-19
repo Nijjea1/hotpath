@@ -1,0 +1,13 @@
+{
+  "idea": "Aggregate request totals in one dictionary pass",
+  "strategy": "data structure: use set/dict/deque/Counter instead of list scans",
+  "target_file": "analytics.py",
+  "rationale": "The current code scans every event twice for each path. A dictionary records both totals in one pass and retains the existing lexical output order.",
+  "risk": "low",
+  "edits": [{
+    "file": "analytics.py",
+    "search": "    paths = sorted({str(event[\"path\"]) for event in events})\n    rows = []\n    for path in paths:\n        requests = sum(1 for event in events if event[\"path\"] == path)\n        total_bytes = sum(int(event[\"bytes\"]) for event in events if event[\"path\"] == path)\n        rows.append({\"path\": path, \"requests\": requests, \"bytes\": total_bytes})\n    return rows",
+    "replace": "    totals = {}\n    for event in events:\n        path = str(event[\"path\"])\n        row = totals.setdefault(path, [0, 0])\n        row[0] += 1\n        row[1] += int(event[\"bytes\"])\n    return [{\"path\": path, \"requests\": totals[path][0], \"bytes\": totals[path][1]} for path in sorted(totals)]"
+  }],
+  "reasoning": "The dictionary stores request count and bytes per path. Sorting only happens after aggregation, so output order and values exactly match the original."
+}

@@ -1,0 +1,13 @@
+{
+  "idea": "Normalize paths before grouping",
+  "strategy": "caching: memoize repeated pure computations",
+  "target_file": "analytics.py",
+  "rationale": "Lowercasing paths could combine repeated keys.",
+  "risk": "medium",
+  "edits": [{
+    "file": "analytics.py",
+    "search": "    paths = sorted({str(event[\"path\"]) for event in events})",
+    "replace": "    paths = sorted({str(event[\"path\"]).upper() for event in events})"
+  }],
+  "reasoning": "This is intentionally a semantic change. The locked reference check should reject it because paths are case-sensitive output keys."
+}

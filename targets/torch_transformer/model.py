@@ -6,6 +6,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from kernels.token_select import select_next
 
 VOCAB, D_MODEL, N_LAYERS, N_HEADS, MAX_SEQ = 256, 256, 4, 4, 1024
 
@@ -80,8 +81,7 @@ def generate(model: TinyGPT, prompt: torch.Tensor, n_new: int) -> torch.Tensor:
     logits = model(prompt, caches, start_pos=0)
     out = prompt
     for _ in range(n_new):
-        nxt = int(logits[:, -1, :].argmax(dim=-1).item())     # CPU sync every token
-        nxt_t = torch.tensor([[nxt]], device=prompt.device)
+        nxt_t = select_next(logits)  # editable kernel surface; baseline syncs every token
         out = torch.cat([out, nxt_t], dim=1)
         logits = model(nxt_t, caches, start_pos=out.shape[1] - 1)
     return out
