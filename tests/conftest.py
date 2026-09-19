@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parent.parent
 def no_external_telemetry(monkeypatch):
     # Tests never load a developer's real DSN from .env or send telemetry.
     monkeypatch.setenv("SENTRY_DSN", "")
+    # Nor a developer's user-level API keys (~/.hotpath/.env), which the CLI loads.
+    monkeypatch.setenv("HOTPATH_HOME", str(ROOT / ".tmp" / "no-hotpath-home"))
     # Temporary target worktrees call `python` and import the installed Hotpath
     # helpers. Keep those subprocesses on the interpreter running pytest.
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", ""))

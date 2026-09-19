@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import hashlib
+import os
 import re
 
 import yaml
@@ -51,6 +52,40 @@ def config_snapshot(cfg: HotpathConfig) -> dict:
             host += f":{parsed.port}"
         data["provider"]["worker_base_url"] = urlunsplit((parsed.scheme, host, parsed.path, "", ""))
     return data
+
+
+#: What `hotpath init` writes at a repository root, and what every command looks for when no config is given.
+CONFIG_NAMES = (".hotpath.yaml", ".hotpath.yml")
+
+
+class ConfigNotFound(FileNotFoundError):
+    pass
+
+
+def find_config(start: str | Path | None = None) -> Path:
+    """The nearest `.hotpath.yaml`, searching from `start` (default: cwd) up to the filesystem root."""
+    here = Path(start or Path.cwd()).resolve()
+    for d in (here, *here.parents):
+        for name in CONFIG_NAMES:
+            if (d / name).is_file():
+                return d / name
+    raise ConfigNotFound(f"no {CONFIG_NAMES[0]} in {here} or any parent directory; run `hotpath init` in your repository first")
+
+
+def hotpath_home() -> Path:
+    return Path(os.environ.get("HOTPATH_HOME") or (Path.home() / ".hotpath"))
+
+
+def load_env_files() -> list[Path]:
+    """Load API keys without ever overriding the real environment: first `./.env`, then the user-level
+    `~/.hotpath/.env`, which is where keys belong when Hotpath runs inside someone's own repository."""
+    from dotenv import load_dotenv
+    loaded = []
+    for p in (Path.cwd() / ".env", hotpath_home() / ".env"):
+        if p.is_file():
+            load_dotenv(p, override=False)
+            loaded.append(p)
+    return loaded
 
 
 def load_config(path: str | Path) -> HotpathConfig:

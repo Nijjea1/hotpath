@@ -1,4 +1,4 @@
-"""hotpath run <config> | hotpath serve <config> | hotpath export <config> <dest>"""
+"""hotpath init | run [--pr] | pr | serve | ablate | export. The config defaults to the nearest .hotpath.yaml."""
 from __future__ import annotations
 
 import argparse
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from hotpath import observability as obs
-from hotpath.config import load_config
+from hotpath.config import ConfigNotFound, find_config, load_config, load_env_files
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -16,10 +16,34 @@ def _setup_logging(verbose: bool) -> None:
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s", datefmt="%H:%M:%S")
 
 
+def _config(arg: str | None):
+    """An explicit config path, or the nearest `.hotpath.yaml` above the current directory."""
+    return load_config(arg if arg else find_config())
+
+
+def _publish(cfg, store, run, ws, args, pruned=None, ablation_md=None) -> int:
+    from hotpath.pr import PRError, publish
+    push = not getattr(args, "no_push", False)
+    try:
+        rec = publish(cfg, store, run, ws, base=args.base, remote=args.remote, draft=args.draft, push=push,
+                      allow_moved_base=args.allow_moved_base, method=args.pr_method, pruned=pruned,
+                      ablation_md=ablation_md, say=lambda m: print("  " + m))
+    except PRError as e:
+        print(f"pull request not published: {e}")
+        return 1
+    if rec.url:
+        print(f"PR: {rec.url}")
+    elif rec.method == "link":
+        print(f"branch {rec.branch} pushed; open the PR: {rec.compare_url}")
+    else:
+        print(f"branch {rec.branch} is ready" + (" and pushed" if push else " (local only)"))
+    return 0
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     from hotpath.orchestrator import Orchestrator, ResumeError
 
-    cfg = load_config(args.config)
+    cfg = _config(args.config)
     if args.iterations is not None:
         cfg.search.iterations = args.iterations
     if args.beam is not None:
@@ -44,7 +68,68 @@ def cmd_run(args: argparse.Namespace) -> int:
         dest = Path(args.export)
         orch.export_best(dest)
         print(f"exported optimized tree to {dest}")
-    return 0 if run.status == "finished" else 1
+    if run.status != "finished":
+        return 1
+    if args.pr:
+        if run.head_commit == run.base_commit:
+            print("no change was both correct and measurably faster, so no pull request was opened")
+            return 0
+        return _publish(cfg, orch.store, run, orch.ws, args)
+    return 0
+
+
+def cmd_pr(args: argparse.Namespace) -> int:
+    from hotpath.store import Store
+    from hotpath.workspace import Workspace
+
+    cfg = _config(args.config)
+    obs.init_sentry()
+    ws = Workspace(Path(cfg.target).resolve(), Path(cfg.workdir))
+    store = Store(cfg.db_path or (ws.workdir / "hotpath.db"))
+    run = store.get_run(args.run_id) if args.run_id else store.latest_run()
+    if run is None:
+        print("no run found; start one with `hotpath run`")
+        return 1
+    pruned, ablation_md = None, None
+    if args.prune:
+        from hotpath.ablation import render
+        report = asyncio.run(_ablate(cfg, store, run, True))
+        ablation_md, pruned = render(report), report.prune
+        print(f"prune: {pruned.status}. {pruned.reason}")
+    print(f"publishing {run.id} ({run.best_speedup:.3f}x vs baseline)")
+    return _publish(cfg, store, run, ws, args, pruned, ablation_md)
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    from hotpath.init import InitError, gather_answers, init_repo
+
+    repo = Path(args.path).resolve()
+
+    def ask(prompt: str, default: str) -> str:
+        return input(prompt + (f" [{default}]" if default else "") + ": ")
+
+    given = {"test_cmd": args.test_cmd, "bench_cmd": args.bench_cmd, "profile_cmd": args.profile_cmd,
+             "editable": [x.strip() for x in args.editable.split(",") if x.strip()] if args.editable else None,
+             "locked": args.lock, "execution": args.execution, "planner": args.planner, "worker": args.worker,
+             "mock_patches_dir": args.mock_patches, "name": args.name}
+    interactive = not args.yes and sys.stdin.isatty()
+    try:
+        answers, notes = gather_answers(repo, ask=ask if interactive else None, **given)
+        result = init_repo(repo, answers, force=args.force, workflow=not args.no_workflow)
+    except InitError as e:
+        print(f"hotpath init: {e}")
+        return 1
+    for p in result.written:
+        print(f"  wrote  {p.relative_to(repo).as_posix()}")
+    for p in result.skipped:
+        print(f"  kept   {p.relative_to(repo).as_posix()} (exists; --force replaces it)")
+    print(f"\ncorrectness  {answers.test_cmd}\nbenchmark    {answers.bench_cmd}\n"
+          f"editable     {', '.join(answers.editable)}\nlocked       {', '.join(answers.locked)}")
+    for n in notes + result.notes:
+        print(f"note: {n}")
+    print('\nnext:\n  git add .hotpath.yaml .gitignore .github && git commit -m "Set up Hotpath" && git push\n'
+          "  hotpath run --pr")
+    return 0
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -55,6 +140,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         raise ValueError("dashboard requires a loopback host; use an authenticated reverse proxy for remote access")
 
     cfg = load_config(args.config) if args.config else None
+    if cfg is None and not args.db:
+        cfg = _config(None)
     obs.init_sentry()
     app = create_app(cfg, db_path=args.db)
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
@@ -73,7 +160,7 @@ def cmd_ablate(args: argparse.Namespace) -> int:
     from hotpath.ablation import render
     from hotpath.orchestrator import Orchestrator
 
-    cfg = load_config(args.config)
+    cfg = _config(args.config)
     obs.init_sentry()
     orch = Orchestrator(cfg)  # only for its store path resolution
     run = orch.store.get_run(args.run_id) if args.run_id else orch.store.latest_run()
@@ -91,7 +178,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     from hotpath.store import Store
     from hotpath.workspace import Workspace
 
-    cfg = load_config(args.config)
+    cfg = _config(args.config)
     obs.init_sentry()
     target = Path(cfg.target).resolve()
     ws = Workspace(target, Path(cfg.workdir))
@@ -116,8 +203,7 @@ def cmd_export(args: argparse.Namespace) -> int:
             print(f"prune: {pruned.status}. {pruned.reason}")
         print(f"exported PR bundle for {run.id} ({run.best_speedup:.3f}x vs baseline) to {dest}")
     print(f"  {dest / 'REPORT.md'}\n  {dest / 'changes.patch'}\n  {dest / 'optimized_src'}/")
-    print("To open a PR: review changes.patch, then in your repo:")
-    print(f"  git checkout -b hotpath/optimize && git apply \"{dest / 'changes.patch'}\" && git commit -am 'hotpath: optimizations' && gh pr create")
+    print(f"To open a pull request with one verified commit per change: hotpath pr --run-id {run.id}")
     return 0
 
 
@@ -125,8 +211,34 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="hotpath", description="AI proposes optimizations; Hotpath proves whether they work.")
     p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="cmd", required=True)
+    i = sub.add_parser("init", help="set a repository up for Hotpath (.hotpath.yaml + CI check)")
+    i.add_argument("path", nargs="?", default=".")
+    i.add_argument("--test-cmd", help="command that checks correctness (exit 0 = correct)")
+    i.add_argument("--bench-cmd", help="command that prints Hotpath benchmark JSON")
+    i.add_argument("--profile-cmd", help="command that prints a Hotpath profile (optional)")
+    i.add_argument("--editable", help="comma-separated globs Hotpath may edit (default: *.py, or src/*.py)")
+    i.add_argument("--lock", action="append", default=[], help="an extra glob Hotpath must never edit (repeatable)")
+    i.add_argument("--execution", choices=["local", "docker"], help="where candidate code runs")
+    i.add_argument("--planner", choices=["openai", "mock"])
+    i.add_argument("--worker", choices=["openai", "baseten", "mock"])
+    i.add_argument("--mock-patches", help="directory of recorded patches for offline `--provider mock` runs")
+    i.add_argument("--name", help="name shown in reports (default: the directory name)")
+    i.add_argument("-y", "--yes", action="store_true", help="accept detected defaults without prompting")
+    i.add_argument("--force", action="store_true", help="overwrite an existing .hotpath.yaml and workflow")
+    i.add_argument("--no-workflow", action="store_true", help="do not write the GitHub Actions check")
+    i.set_defaults(fn=cmd_init)
+
+    def pr_flags(sp: argparse.ArgumentParser) -> None:
+        sp.add_argument("--base", help="branch the PR targets (default: the branch the run measured)")
+        sp.add_argument("--remote", default="origin")
+        sp.add_argument("--draft", action="store_true", help="open the PR as a draft")
+        sp.add_argument("--pr-method", choices=["auto", "gh", "token", "link"], default="auto",
+                        help="how to open the PR: gh CLI, GITHUB_TOKEN, or a pre-filled link (auto tries them in order)")
+        sp.add_argument("--allow-moved-base", action="store_true",
+                        help="publish even though the base branch moved since the run measured it")
+
     r = sub.add_parser("run", help="run the optimization loop once")
-    r.add_argument("config")
+    r.add_argument("config", nargs="?", help="config file (default: the nearest .hotpath.yaml)")
     r.add_argument("--iterations", type=int)
     r.add_argument("--beam", type=int, help="beam width: how many accepted heads to keep and expand each iteration (1 = greedy)")
     r.add_argument("--provider", choices=["mock", "openai"], help="override both planner and worker providers")
@@ -136,7 +248,16 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--resume", metavar="RUN_ID",
                    help="continue a stopped or failed run from its stored beam instead of re-measuring a baseline; "
                         "runs up to the larger of its original budget and --iterations")
+    r.add_argument("--pr", action="store_true", help="when the run finishes with a win, push a branch and open a pull request")
+    pr_flags(r)
     r.set_defaults(fn=cmd_run)
+    q = sub.add_parser("pr", help="publish a finished run as a pull request (one verified commit per change)")
+    q.add_argument("config", nargs="?", help="config file (default: the nearest .hotpath.yaml)")
+    q.add_argument("--run-id", help="which run to publish (defaults to the latest)")
+    q.add_argument("--prune", action="store_true", help="ablate first and ship the verified pruned stack if there is one")
+    q.add_argument("--no-push", action="store_true", help="only build the local branch hotpath/<run id>")
+    pr_flags(q)
+    q.set_defaults(fn=cmd_pr)
     s = sub.add_parser("serve", help="serve the dashboard (and allow starting runs from it)")
     s.add_argument("config", nargs="?")
     s.add_argument("--db", help="database path (defaults to the config's)")
@@ -144,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--port", type=int, default=8765)
     s.set_defaults(fn=cmd_serve)
     a = sub.add_parser("ablate", help="re-measure the accepted chain with each change removed")
-    a.add_argument("config")
+    a.add_argument("config", nargs="?")
     a.add_argument("--run-id")
     a.add_argument("--json", help="write the report here")
     a.add_argument("--prune", action="store_true",
@@ -152,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
                         "stack only if it passes correctness and the full stack is not measurably faster")
     a.set_defaults(fn=cmd_ablate)
     x = sub.add_parser("export", help="write a PR-ready bundle (optimized tree, diff, benchmark table, ablation)")
-    x.add_argument("config")
+    x.add_argument("config", help="config file (use .hotpath.yaml for the current repository)")
     x.add_argument("dest", help="directory to write the bundle into")
     x.add_argument("--run-id", help="which run to export (defaults to the latest)")
     x.add_argument("--ablate", action="store_true", help="also run leave-one-out ablation and include the table (re-runs benchmarks)")
@@ -161,8 +282,12 @@ def main(argv: list[str] | None = None) -> int:
     x.set_defaults(fn=cmd_export)
     args = p.parse_args(argv)
     _setup_logging(args.verbose)
+    load_env_files()
     try:
         return args.fn(args)
+    except ConfigNotFound as e:
+        print(f"hotpath: {e}")
+        return 1
     finally:
         obs.flush()
 

@@ -173,6 +173,13 @@ class Workspace:
     def head(self) -> str:
         return _git(["rev-parse", "HEAD"], self.target)
 
+    def current_branch(self) -> str:
+        """The checked-out branch name, or "" when HEAD is detached."""
+        try:
+            return _git(["symbolic-ref", "-q", "--short", "HEAD"], self.target)
+        except RuntimeError:
+            return ""
+
     # -- worktrees ----------------------------------------------------------
     def create_worktree(self, commit: str, name: str) -> Path:
         self._check_workdir()
@@ -221,6 +228,7 @@ class Workspace:
         # Then apply every edit, in order, to an in-memory copy, so each search is checked against
         # the text it will actually be applied to and nothing is written unless all of them succeed.
         contents: dict[str, str] = {}
+        crlf: dict[str, bool] = {}
         created: list[str] = []
         for e in edits:
             f = safe_target_path(worktree, e.file)
@@ -235,7 +243,12 @@ class Workspace:
             if e.file not in contents:
                 if not f.is_file():
                     raise PatchError(f"file does not exist: {e.file} (use an empty search to create it)")
-                contents[e.file] = f.read_text()
+                # Match on "\n" (what models write) but remember the file's own line endings, so an
+                # edit never rewrites every line of a file -- which on Windows text mode otherwise would.
+                with f.open(encoding="utf-8", newline="") as fh:
+                    raw = fh.read()
+                crlf[e.file] = "\r\n" in raw
+                contents[e.file] = raw.replace("\r\n", "\n")
             if not e.search.strip():
                 raise PatchError(f"empty search block for {e.file}")
             if e.search == e.replace:
@@ -249,7 +262,7 @@ class Workspace:
         for rel, text in contents.items():
             f = safe_target_path(worktree, rel)
             f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_text(text)
+            f.write_text(text.replace("\n", "\r\n") if crlf.get(rel) else text, encoding="utf-8", newline="")
         if created:
             # Intent-to-add puts new files in the index without staging their content, so they appear
             # in the recorded diff and in isolated execution, which stages tracked files only.
@@ -264,8 +277,9 @@ class Workspace:
         _git(["add", "-A"], worktree)
         _git(["commit", "-q", "-m", message], worktree)
         sha = _git(["rev-parse", "HEAD"], worktree)
-        # Keep the commit reachable after the worktree is removed.
-        _git(["branch", "-f", f"hotpath/{exp_id}", sha], self.target)
+        # Keep the commit reachable after the worktree is removed. A private ref namespace, not a
+        # branch: a run makes dozens of these, and they must not clutter the user's `git branch`.
+        _git(["update-ref", f"refs/hotpath/experiments/{exp_id}", sha], self.target)
         return sha
 
     def has_commit(self, sha: str) -> bool:

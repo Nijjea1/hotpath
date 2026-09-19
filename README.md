@@ -71,6 +71,31 @@ and correctness-rejection verdicts, and left no worktrees behind. The latest loc
 measured 72.8–137.8x speedup; the spread reflects variable baseline noise, not a
 post-hoc choice of run. The ignored runtime evidence is `reports/slow_web_analytics_reliability.json`.
 
+## Use it on your own repository: from `init` to a pull request
+
+```bash
+cd my-repo
+hotpath init                 # writes .hotpath.yaml + a GitHub Actions check, ignores .hotpath/
+git add .hotpath.yaml .gitignore .github && git commit -m "Set up Hotpath" && git push
+hotpath run --pr             # optimize, then push hotpath/<run id> and open a PR
+```
+
+`init` detects your correctness check (`pytest`, `tests/check.py`, …) and benchmark, locks them,
+and asks what Hotpath may edit. Every command then finds the nearest `.hotpath.yaml`, so no config
+path is needed. API keys come from the environment or `~/.hotpath/.env`, never from your repo.
+
+The pull request has **one commit per verified change**. Each commit is the exact tree the harness
+tested and benchmarked, and its message gives the measured speedup and confidence interval. The
+description carries the before/after table, every rejected attempt with its reason, and the
+commands to reproduce. The generated workflow re-runs the locked check on GitHub and fails any
+`hotpath/*` PR that touches a locked or non-editable file. Publishing refuses if your base branch
+moved since the run measured it. Re-publishing the same run refreshes the same PR.
+
+To open the PR, Hotpath uses `gh` if it is logged in, else `GITHUB_TOKEN`/`GH_TOKEN`. Without
+either, it pushes the branch and prints a pre-filled "open pull request" link. `hotpath pr`
+publishes an earlier run (`--run-id`, `--prune`, `--draft`, `--base`, `--no-push`), and the
+dashboard has a **Create PR** button for finished runs. See [`docs/PULL_REQUESTS.md`](docs/PULL_REQUESTS.md).
+
 ## With real models
 
 ```bash

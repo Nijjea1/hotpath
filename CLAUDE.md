@@ -34,7 +34,17 @@ hotpath export configs/demo_repo.yaml out/  # PR bundle: optimized tree + change
 hotpath run configs/demo_repo_beam.yaml     # offline run exercising beam branching + a retry chain
 
 pytest -q                                   # make test
+
+# Inside any repo (config = nearest .hotpath.yaml):
+hotpath init                                # .hotpath.yaml + .github/workflows/hotpath-verify.yml
+hotpath run --pr                            # run, then push hotpath/<run id> and open/refresh a PR
+hotpath pr [--run-id ID] [--prune] [--no-push] [--base B] [--draft]
 ```
+
+PR publishing (`pr.py`, `github.py`, `init.py`; see `docs/PULL_REQUESTS.md`): one commit per
+shipped change, rebuilt with `git commit-tree` from the exact verified trees (the user's
+checkout is never touched). Refuses if the run's base branch moved on the remote. Opens the PR via
+`gh` → `GITHUB_TOKEN` → pre-filled link. Experiment commits live under `refs/hotpath/experiments/*`.
 
 Useful `run` flags: `--iterations N`, `--beam N` (beam width; 1 = greedy), `--provider {mock,openai}`
 (overrides both planner and worker), `--export <dir>` (write the best accepted source tree out),

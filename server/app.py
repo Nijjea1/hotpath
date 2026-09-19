@@ -35,6 +35,12 @@ class StartRequest(BaseModel):
     provider: Optional[ProviderKind] = None
 
 
+class PublishRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    base: Optional[str] = Field(None, min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_][A-Za-z0-9._/-]*$")
+    draft: bool = False
+
+
 def create_app(cfg: HotpathConfig | None = None, db_path: str | None = None) -> FastAPI:
     obs.init_sentry()  # Also covers callers that use the app factory without the CLI.
 
@@ -84,7 +90,7 @@ def create_app(cfg: HotpathConfig | None = None, db_path: str | None = None) -> 
         store = Store(cfg.db_path or ((wd if wd.is_absolute() else target / wd) / "hotpath.db"))
     else:
         raise ValueError("serve needs a config or --db")
-    state: dict = {"cfg": cfg, "store": store, "orch": None, "task": None}
+    state: dict = {"cfg": cfg, "store": store, "orch": None, "task": None, "publishing": False}
 
     @app.get("/api/runs")
     def runs():
@@ -164,6 +170,38 @@ def create_app(cfg: HotpathConfig | None = None, db_path: str | None = None) -> 
         state["orch"] = orch
         state["task"] = asyncio.create_task(orch.execute())
         return {"run_id": orch.run.id}
+
+    @app.post("/api/runs/{run_id}/pr")
+    async def publish_pr(run_id: str, req: PublishRequest, request: Request):
+        """Push the run's verified changes as `hotpath/<run id>` and open (or refresh) its pull request."""
+        if not request.client or request.client.host not in {"127.0.0.1", "::1", "testclient"}:
+            raise HTTPException(403, "publishing is available only from the local host")
+        if not request.headers.get("content-type", "").startswith("application/json"):
+            # A cross-site form post cannot set this header without a CORS preflight, which is never granted.
+            raise HTTPException(415, "send the request as application/json")
+        run = store.get_run(run_id)
+        if run is None:
+            raise HTTPException(404, "no such run")
+        if state["task"] is not None and not state["task"].done() and state["orch"].run.id == run_id:
+            raise HTTPException(409, "this run is still in progress; publish it when it finishes")
+        if state["publishing"]:
+            raise HTTPException(409, "a pull request is already being published")
+        run_cfg = _run_config(run) or cfg
+        if run_cfg is None:
+            raise HTTPException(400, "this run has no configuration snapshot; publish it with `hotpath pr`")
+        from hotpath.pr import PRError, publish
+        from hotpath.workspace import Workspace
+        messages: list[str] = []
+        state["publishing"] = True
+        try:
+            ws = Workspace(Path(run.target), Path(run_cfg.workdir))
+            record = await asyncio.to_thread(publish, run_cfg, store, run, ws, base=req.base, draft=req.draft,
+                                             say=messages.append)
+        except PRError as e:
+            raise HTTPException(400, str(e))
+        finally:
+            state["publishing"] = False
+        return {"pull_request": record.model_dump(mode="json"), "log": messages}
 
     @app.post("/api/runs/{run_id}/stop")
     def stop_run(run_id: str, request: Request):

@@ -37,6 +37,9 @@ class FakeWorkspace:
     def ensure_repo(self, autocommit=False):
         return "base"
 
+    def current_branch(self):
+        return "main"
+
     def materialize(self, commit, name):
         dest = self.root / name
         dest.mkdir(exist_ok=True)

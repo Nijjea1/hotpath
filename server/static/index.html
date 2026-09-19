@@ -52,6 +52,7 @@ main{max-width:1608px;margin:auto;padding:42px 24px 80px;display:grid;gap:24px}
 .intro h2{font-family:var(--display);font-size:clamp(30px,3.5vw,48px);line-height:1.04;letter-spacing:-.045em;margin:14px 0 10px}
 .intro p{margin:0;color:var(--muted);max-width:650px}
 .run-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.pr-link{font-family:var(--instrument);font-size:12px;white-space:nowrap}
 .run-controls label{font-family:var(--instrument);text-transform:uppercase;letter-spacing:.08em;font-size:10px;color:var(--dim)}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:20px 22px;min-height:120px;position:relative}
@@ -194,9 +195,10 @@ tr.row.isretry td:first-child{border-left:2px solid var(--ai)}
 <main>
   <section class="intro" id="overview" aria-labelledby="pageTitle">
     <div><div class="eyebrow">The optimization workbench</div><h2 id="pageTitle">Run dashboard<span style="color:var(--hot)">.</span></h2><p>Follow each candidate from hypothesis to verdict. Every accepted change is backed by correctness checks and measured speed.</p></div>
-    <div class="run-controls"><label for="runSel">Inspect run</label><select id="runSel" title="Run" aria-label="Inspect run"></select><span id="status" class="status" role="status"><span class="dot"></span><span id="statusText">no run</span></span><button id="stopBtn" style="display:none">Stop run</button><button id="startBtn" class="primary">Start run ↗</button></div>
+    <div class="run-controls"><label for="runSel">Inspect run</label><select id="runSel" title="Run" aria-label="Inspect run"></select><span id="status" class="status" role="status"><span class="dot"></span><span id="statusText">no run</span></span><button id="stopBtn" style="display:none">Stop run</button><button id="startBtn" class="primary">Start run ↗</button><button id="prBtn" style="display:none" title="Push the verified changes as hotpath/&lt;run id&gt; and open a pull request">Create PR</button><a id="prLink" class="pr-link" target="_blank" rel="noopener noreferrer" hidden></a></div>
   </section>
   <div id="connectionError" class="verdict bad" role="alert" hidden></div>
+  <div id="prMessage" class="verdict" role="status" hidden></div>
   <div class="stats" id="stats"></div>
 
   <div class="grid">
@@ -267,6 +269,7 @@ const state = {
   tree: null, chart: null, diff: null,          // server-derived views
   viewKey: null, diffKey: null,                 // cache stamps so polling does not refetch needlessly
   chartMode: null, revision: 0, timer: null,
+  publishing: false,
 };
 const REJECTED = new Set(["patch_failed","locked_file","rejected_correctness","rejected_speed","timeout","error"]);
 const kind = s => s === "accepted" ? "accepted" : s === "not_selected" ? "not_selected" : REJECTED.has(s) ? "rejected" : "pending";
@@ -374,6 +377,44 @@ $("#stopBtn").onclick = async () => {
     }
   } catch (e) { showError(e); }
 };
+// Publishing pushes a branch to the user's remote, so it is only ever started by this explicit click.
+$("#prBtn").onclick = async () => {
+  const run = state.data && state.data.run;
+  if (!run || state.publishing) return;
+  state.publishing = true; render();
+  const msg = $("#prMessage");
+  msg.hidden = false; msg.className = "verdict wait"; msg.textContent = `Publishing ${run.id}: building one commit per verified change and pushing…`;
+  try {
+    const r = await fetch(`/api/runs/${encodeURIComponent(run.id)}/pr`, {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.detail || ("publish failed: HTTP " + r.status));
+    const pr = j.pull_request;
+    msg.className = "verdict ok";
+    msg.textContent = pr.url ? `Pull request ready: ${pr.url}`
+      : pr.compare_url ? `Branch ${pr.branch} pushed. No GitHub credentials were found, so open the pre-filled PR form from the link above.`
+      : `Branch ${pr.branch} is ready.`;
+  } catch (e) {
+    msg.className = "verdict bad"; msg.textContent = "Pull request not published: " + e.message;
+  } finally {
+    state.publishing = false; clearTimeout(state.timer); poll();
+  }
+};
+function renderPR(run, live) {
+  const btn = $("#prBtn"), link = $("#prLink");
+  const pr = run && run.pull_request;
+  const publishable = !!(run && !live && (run.status === "finished" || run.status === "stopped") && run.head_experiment_id);
+  btn.style.display = publishable ? "" : "none";
+  btn.disabled = state.publishing;
+  btn.textContent = state.publishing ? "Publishing…" : (pr && pr.url ? "Update PR" : "Create PR");
+  const href = pr ? (pr.url || pr.compare_url || "") : "";
+  if (href && /^https:\/\//.test(href)) {
+    link.href = href; link.textContent = pr.url ? `PR #${pr.number} ↗` : "Open PR form ↗"; link.hidden = false;
+  } else if (pr) {
+    link.removeAttribute("href"); link.textContent = `branch ${pr.branch}`; link.hidden = false;
+  } else {
+    link.removeAttribute("href"); link.hidden = true;
+  }
+}
 $("#chartMode").querySelectorAll("button").forEach(b => b.onclick = () => {
   state.chartMode = b.dataset.mode; remember("hotpath.chartMode", state.chartMode); render();
 });
@@ -382,6 +423,7 @@ function render() {
   const d = state.data; if (!d) return; const run = d.run;
   $("#startBtn").disabled = !!d.live;
   $("#stopBtn").style.display = d.live ? "" : "none";
+  renderPR(run, d.live);
   const st = $("#status"); st.className = "status " + (run ? (d.live ? "running" : run.status) : "");
   $("#statusText").textContent = run ? (d.live ? `running · iteration ${run.iteration}/${run.total_iterations}` : run.status + (run.error ? " · " + run.error : "")) : "no run";
   if (!run) {

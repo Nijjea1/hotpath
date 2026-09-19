@@ -351,6 +351,22 @@ class Experiment(BaseModel):
 RunStatus = Literal["starting", "baseline", "running", "finished", "failed", "stopped"]
 
 
+class PullRequestRecord(BaseModel):
+    """Where a run's verified changes were published. `url` is empty when only the branch was pushed
+    (no GitHub credentials), in which case `compare_url` is the pre-filled link to open it by hand."""
+    branch: str
+    base: str
+    head_sha: str
+    remote: str = "origin"
+    method: Literal["gh", "token", "link", "local"] = "local"
+    url: str = ""
+    number: Optional[int] = None
+    compare_url: str = ""
+    pruned: bool = False
+    created_at: datetime = Field(default_factory=now)
+    updated_at: datetime = Field(default_factory=now)
+
+
 class RunState(BaseModel):
     id: str = Field(default_factory=lambda: new_id("run"))
     config_name: str
@@ -359,6 +375,7 @@ class RunState(BaseModel):
     execution_environment: dict = Field(default_factory=dict)
     status: RunStatus = "starting"
     base_commit: str = ""
+    base_branch: str = Field("", description="Branch checked out when the run measured its baseline; empty if detached or unknown")
     head_commit: str = ""
     head_experiment_id: Optional[str] = None
     baseline_benchmark: Optional[BenchmarkStats] = None
@@ -371,6 +388,7 @@ class RunState(BaseModel):
     iteration: int = 0
     total_iterations: int = 0
     error: Optional[str] = None
+    pull_request: Optional[PullRequestRecord] = None
     logs: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=now)
     updated_at: datetime = Field(default_factory=now)

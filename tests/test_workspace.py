@@ -89,7 +89,7 @@ def test_apply_edits_and_commit_survive_worktree_removal(ws: Workspace):
     assert files == ["mod.py"] and "+    seen = set()" in diff
     sha = ws.commit(wt, "exp_x", "test")
     ws.remove_worktree(wt)
-    wt2 = ws.create_worktree(sha, "y")  # commit is still reachable via the hotpath/exp_x branch
+    wt2 = ws.create_worktree(sha, "y")  # commit is still reachable via refs/hotpath/experiments/exp_x
     assert "seen = set()" in (wt2 / "mod.py").read_text()
     ws.remove_worktree(wt2)
 
@@ -273,4 +273,21 @@ def test_failing_later_edit_leaves_no_new_file_behind(ws: Workspace):
         ws.apply_edits(wt, [Edit(file="helpers/fast.py", search="", replace=HELPER),
                             Edit(file="mod.py", search="not in the file", replace="x")], E + ["helpers/*.py"], L)
     assert not (wt / "helpers").exists()
+    ws.remove_worktree(wt)
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_edits_keep_the_files_line_endings_and_utf8(ws: Workspace, eol: str):
+    """An edit changes only the lines it names. Text-mode writes on Windows used to turn every LF into
+    CRLF, so a one-line optimization showed up in its PR as a whole-file rewrite."""
+    wt = ws.create_worktree(ws.head(), "eol")
+    source = eol.join(["# café: ünïcode survives", "def f(x):", "    return x + 1", "", "def g():", "    return 2", ""])
+    (wt / "u.py").write_bytes(source.encode("utf-8"))
+    ws.commit(wt, "eol_base", "add u.py")
+    files, diff = ws.apply_edits(wt, [Edit(file="u.py", search="def f(x):\n    return x + 1\n",
+                                           replace="def f(x):\n    return x + 2  # faster → better\n")],
+                                 ["*.py"], [])
+    after = (wt / "u.py").read_bytes()
+    assert after == source.replace("x + 1", "x + 2  # faster → better").encode("utf-8")
+    assert after.count(b"\r\n") == (6 if eol == "\r\n" else 0)
     ws.remove_worktree(wt)

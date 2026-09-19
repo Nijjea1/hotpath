@@ -117,7 +117,8 @@ class Orchestrator:
         run.config_snapshot = config_snapshot(cfg)
         self._save()
         run.base_commit = run.head_commit = self.ws.ensure_repo(autocommit=self._autocommit)
-        run.log(f"base commit {run.base_commit[:8]}")
+        run.base_branch = self.ws.current_branch()
+        run.log(f"base commit {run.base_commit[:8]}" + (f" on {run.base_branch}" if run.base_branch else ""))
 
         # ---- Baseline: the reference every experiment is compared against ----
         run.status = "baseline"; self._save()
