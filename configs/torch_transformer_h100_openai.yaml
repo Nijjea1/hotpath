@@ -1,0 +1,40 @@
+﻿# Operator example for a dedicated Linux H100 VM. The image must be reviewed and
+# installed on that VM with CUDA, PyTorch, and Hotpath measurement helpers.
+# This bundled transformer is a development target, not the real Dryft model.
+name: torch_transformer_h100_openai
+target: ../targets/torch_transformer
+test_cmd: python tests/check.py
+bench_cmd: python bench.py
+profile_cmd: python hotprofile.py
+editable: ["model.py"]
+locked: ["tests/*", "bench.py", "hotprofile.py"]
+correctness_contract: "For fixed prompts, greedy tokens must exactly match the frozen reference and CUDA logits must pass tests/check.py tolerance. Preserve shapes, ordering, and exceptions."
+execution:
+  backend: docker
+  image: hotpath-runner:h100-reviewed
+  gpu: device=0
+  cpus: 4
+  memory_mb: 16384
+  pids_limit: 128
+  tmpfs_mb: 1024
+  output_limit_bytes: 1048576
+benchmark:
+  min_speedup: 1.03
+  noise_multiplier: 2.0
+  baseline_repeats: 3
+  exclusive: true
+  rebenchmark_parent: true
+search:
+  iterations: 4
+  candidates_per_iteration: 3
+  max_parallel_tests: 2
+  max_parallel_workers: 4
+  max_parallel_benchmarks: 1
+  max_patch_retries: 1
+provider:
+  planner: openai
+  worker: openai
+  planner_model: gpt-4.1
+  worker_model: gpt-4.1-mini
+  planner_api_key_env: OPENAI_API_KEY
+  worker_api_key_env: OPENAI_API_KEY

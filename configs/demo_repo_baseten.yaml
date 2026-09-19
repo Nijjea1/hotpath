@@ -1,0 +1,28 @@
+# Workers on Baseten, planner on OpenAI — the "big model plans, fast model explores" pattern.
+# Fast CPU demo (no GPU needed) to validate the Baseten worker endpoint end to end.
+#
+# Setup (see docs/BASETEN.md):
+#   export OPENAI_API_KEY=...      # planner
+#   export BASETEN_API_KEY=...     # workers  (redeem promo credits in the Baseten dashboard first)
+# Pick a worker_model from the live catalog:
+#   curl https://inference.baseten.co/v1/models -H "Authorization: Bearer $BASETEN_API_KEY"
+# Then:  hotpath run configs/demo_repo_baseten.yaml --autocommit
+name: demo_repo_baseten
+target: ../demo_repo
+test_cmd: python tests/check.py
+bench_cmd: python bench.py
+profile_cmd: python hotprofile.py
+editable: ["*.py"]
+locked: ["tests/*", "bench.py", "hotprofile.py", "data.py"]
+search: {iterations: 3, candidates_per_iteration: 3, max_parallel_workers: 4}
+provider:
+  planner: openai
+  planner_model: gpt-4.1                # planner stays on OpenAI (reliable structured outputs)
+  planner_api_key_env: OPENAI_API_KEY
+  worker: openai                        # OpenAI-compatible client, pointed at Baseten below
+  worker_model: moonshotai/Kimi-K2.7-Code   # fastest + code-specialized (probed 0.8s, structured outputs OK)
+  worker_base_url: https://inference.baseten.co/v1
+  worker_api_key_env: BASETEN_API_KEY
+
+# Trusted bundled demo only; use the Docker config for arbitrary repositories.
+execution: {backend: local}

@@ -54,7 +54,7 @@ provider:
   planner: openai
   planner_model: gpt-4.1                   # big model plans
   worker: openai                           # OpenAI-compatible; point at Baseten below
-  worker_model: <baseten-model-name>       # e.g. the deployed coding model's served name
-  worker_base_url: https://model-XXXX.api.baseten.co/environments/production/sync/v1
+  worker_model: moonshotai/Kimi-K2.7-Code   # fastest + code-specialized (probed 0.8s, structured outputs OK)
+  worker_base_url: https://inference.baseten.co/v1   # Baseten hosted Model APIs (OpenAI-compatible)
   worker_api_key_env: BASETEN_API_KEY
   planner_api_key_env: OPENAI_API_KEY
