@@ -69,6 +69,48 @@ async def test_ablation_reports_structured_error_when_full_stack_fails(cfg, stor
     assert "not measured" in ablation.render(report)
 
 
+async def test_ablation_marks_a_neutral_change_in_a_composed_stack_removable(cfg, store, monkeypatch, tmp_path):
+    """A can be accepted historically yet add no measurable value once B is present.
+
+    The ablation must compare each omission with a freshly measured full stack,
+    so this neutral result is not hidden by an old stored benchmark.
+    """
+    run, exps = _chain_run(store, tmp_path, ["A", "B"])
+    run.head_commit = "head"
+
+    class FakeWorkspace:
+        removed = []
+        applied_by_worktree = {}
+        def __init__(self, *_): pass
+        def create_worktree(self, commit, name):
+            path = Path(name)
+            self.applied_by_worktree[path.name] = []
+            return path
+        def remove_worktree(self, path): self.removed.append(path)
+        def apply_edits(self, wt, edits, *_): self.applied_by_worktree[wt.name].append(edits[0].search)
+
+    class FakeHarness:
+        def __init__(self, *_): pass
+        async def run_tests(self, _): return CorrectnessResult(passed=True, exit_code=0, duration_s=0)
+        async def run_benchmark(self, path):
+            # Full A+B is 50.  Removing A leaves B's full benefit; removing B
+            # loses it, proving this is a composed-stack rather than a one-edit case.
+            if path.name.startswith("ablate_full_"):
+                return compute_stats([50] * 5)
+            applied = FakeWorkspace.applied_by_worktree[path.name]
+            return compute_stats([50] * 5 if applied == ["B"] else [100] * 5)
+
+    monkeypatch.setattr(ablation, "Workspace", FakeWorkspace)
+    monkeypatch.setattr(ablation, "Harness", FakeHarness)
+    report = await ablation.ablate(cfg, store, run)
+    rows = {row.idea: row for row in report.rows}
+    assert rows["A"].contribution == pytest.approx(1.0)
+    assert rows["A"].pulls_weight is False
+    assert "costs nothing measurable" in rows["A"].reason
+    assert rows["B"].contribution == pytest.approx(2.0)
+    assert rows["B"].pulls_weight is True
+
+
 # --------------------------------------------------------------------------- #
 # Pruning
 # --------------------------------------------------------------------------- #

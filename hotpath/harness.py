@@ -101,7 +101,8 @@ class Harness:
                     raise TimeoutError(f"benchmark timed out after {self.cfg.timeouts.bench}s")
                 if res.exit_code != 0:
                     raise BenchmarkParseError(f"benchmark exited {res.exit_code}: {tail(res.stderr, 20)}")
-                stats = stats_from_output(res.stdout, res.duration_s, tail(res.stdout + res.stderr, 20))
+                stats = stats_from_output(res.stdout, res.duration_s, tail(res.stdout + res.stderr, 20),
+                                          required_workloads=self.cfg.benchmark.required_workloads)
                 sp.set_data("median", stats.median)
                 sp.set_data("cv", stats.cv)
         return stats
@@ -229,6 +230,12 @@ class Harness:
 
 def stats_from_output_samples(runs: list[BenchmarkStats]) -> BenchmarkStats:
     from hotpath.benchmark import compute_stats
+    if any(r.metric != runs[0].metric or r.higher_is_better != runs[0].higher_is_better
+           or set(r.workload_samples) != set(runs[0].workload_samples) for r in runs[1:]):
+        raise BenchmarkParseError("baseline benchmark metric or workload set changed across repeats")
     samples = [s for r in runs for s in r.samples]
+    workloads = {workload_id: [value for run in runs for value in run.workload_samples[workload_id]]
+                 for workload_id in runs[0].workload_samples}
     return compute_stats(samples, runs[0].metric, runs[0].higher_is_better,
-                         duration_s=sum(r.duration_s for r in runs), output_tail=runs[-1].output_tail)
+                         duration_s=sum(r.duration_s for r in runs), output_tail=runs[-1].output_tail,
+                         workload_samples=workloads)

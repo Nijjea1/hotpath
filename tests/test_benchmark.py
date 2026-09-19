@@ -54,6 +54,34 @@ def test_noise_raises_the_bar():
     assert not c.significant and c.threshold == pytest.approx(1.10)
 
 
+def test_speedup_equal_to_noise_adjusted_threshold_is_accepted():
+    # Equality is intentional: the evidence gate is "at least the declared
+    # threshold".  The CI still has to exclude 1.0.
+    cfg = BenchmarkConfig(min_speedup=1.01, noise_multiplier=2.0, bootstrap_samples=500)
+    threshold = 1.03  # 1 + (2 * 1.5% baseline noise)
+    base, cand = _stats(1.0, spread=0.0), _stats(1.0 / threshold, spread=0.0)
+    c = compare(base, cand, base, cfg, noise=0.015)
+    assert c.threshold == pytest.approx(threshold)
+    assert c.speedup_vs_parent == pytest.approx(threshold)
+    assert c.significant
+
+
+def test_bootstrap_ci_touching_one_is_rejected_but_strictly_above_one_passes():
+    cfg = BenchmarkConfig(min_speedup=1.001, noise_multiplier=0.0, bootstrap_samples=500)
+    base = _stats(1.0, spread=0.0)
+    # The median says 1.01x, enough to clear the point threshold, but bootstrap
+    # resamples can select only the unchanged observations and touch 1.0.
+    uncertain = compute_stats([1.0, 0.98])
+    touching = compare(base, uncertain, base, cfg, noise=0.0)
+    assert touching.speedup_vs_parent > touching.threshold
+    assert touching.ci_low == pytest.approx(1.0)
+    assert not touching.significant and "includes 1.0" in touching.reason
+
+    faster = _stats(0.99, spread=0.0)
+    clear = compare(base, faster, base, cfg, noise=0.0)
+    assert clear.ci_low > 1.0 and clear.significant
+
+
 def test_overlapping_distributions_are_rejected_by_ci():
     # Same center, huge spread: point estimate can look like a speedup but the CI includes 1.
     base = compute_stats([1.0, 0.6, 1.4, 0.8, 1.2, 0.5, 1.5, 0.7, 1.3, 1.0])
@@ -68,9 +96,25 @@ def test_higher_is_better_metric():
     assert c.significant and c.speedup_vs_parent == pytest.approx(1.5, rel=0.02)
 
 
+def test_higher_is_better_inversion_rejects_lower_throughput():
+    base, cand = _stats(100.0, higher=True), _stats(90.0, higher=True)
+    c = compare(base, cand, base, CFG, noise=0.0)
+    assert c.speedup_vs_parent == pytest.approx(0.9, rel=0.02)
+    assert not c.significant and "slower" in c.reason
+
+
 def test_metric_mismatch_never_accepted():
     base, cand = _stats(1.0), _stats(2.0, higher=True)
     assert not compare(base, cand, base, CFG, noise=0.0).significant
+
+
+def test_baseline_metric_or_direction_mismatch_never_produces_cumulative_speedup():
+    parent, cand = _stats(1.0), _stats(0.5)
+    wrong_direction = _stats(100.0, higher=True)
+    c = compare(parent, cand, wrong_direction, CFG, noise=0.0)
+    assert not c.significant
+    assert c.speedup_vs_parent == c.speedup_vs_baseline == 0.0
+    assert "baseline" in c.reason
 
 
 def test_speedup_vs_baseline_uses_baseline_not_parent():

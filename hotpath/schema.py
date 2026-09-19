@@ -59,6 +59,14 @@ class BenchmarkConfig(ConfigModel):
     confidence: float = Field(0.95, gt=0, lt=1)
     exclusive: bool = Field(True, description="Benchmarks wait for all tests to finish and run alone (CPU targets). Set False when tests and benchmarks use different resources.")
     rebenchmark_parent: bool = Field(False, description="Re-measure the parent right before each candidate so machine drift between iterations cannot bias the decision. Doubles benchmark cost.")
+    required_workloads: list[str] = Field(default_factory=list, description="Fixed workload IDs that every benchmark invocation must measure")
+    min_workload_retention: float = Field(0.98, gt=0, le=1, description="Minimum candidate/parent throughput ratio for each required workload")
+
+    @model_validator(mode="after")
+    def validate_workloads(self):
+        if len(self.required_workloads) != len(set(self.required_workloads)) or any(not x.strip() for x in self.required_workloads):
+            raise ValueError("benchmark.required_workloads must contain unique nonempty IDs")
+        return self
 
 
 class SearchConfig(ConfigModel):
@@ -153,6 +161,17 @@ class Hotspot(BaseModel):
     calls: int = 0
 
 
+class ProfileFrame(BaseModel):
+    """An observed, nested profiler event; children are actual call relationships."""
+    function: str
+    file: str = ""
+    line: int = 0
+    self_time: float
+    total_time: float
+    calls: int = 0
+    children: list[ProfileFrame] = Field(default_factory=list)
+
+
 class ProfileSummary(BaseModel):
     tool: str = "none"
     total_time: float = 0.0
@@ -167,6 +186,9 @@ class ProfileSummary(BaseModel):
     residual_self_time: float = Field(0.0, description="total_time minus the self time of retained rows")
     cutoff_self_time: float = Field(0.0, description="Smallest retained self time: the upper bound on any omitted row")
     completeness_known: bool = False
+    flamegraph: list[ProfileFrame] = Field(default_factory=list)
+    flamegraph_source: str = ""
+    flamegraph_unavailable_reason: str = ""
 
 
 # --------------------------------------------------------------------------- #
@@ -244,6 +266,7 @@ class BenchmarkStats(BaseModel):
     cv: float = Field(description="Coefficient of variation within this run")
     duration_s: float = 0.0
     output_tail: str = ""
+    workload_samples: dict[str, list[float]] = Field(default_factory=dict, description="Per-workload samples in the headline metric's direction")
 
 
 class SpeedComparison(BaseModel):
@@ -255,6 +278,7 @@ class SpeedComparison(BaseModel):
     significant: bool
     reason: str
     confidence: float = 0.95
+    workload_ratios: dict[str, float] = Field(default_factory=dict, description="Candidate/parent throughput ratio by required workload")
 
 
 # --------------------------------------------------------------------------- #
