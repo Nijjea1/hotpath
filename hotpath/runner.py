@@ -19,12 +19,22 @@ def tail(text: str, lines: int = TAIL_LINES) -> str:
 def _kill_tree(proc):
     try:
         if _WINDOWS:
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            result = subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            # A missing taskkill or a race with process exit should not leave
+            # the asyncio child object running indefinitely.
+            if getattr(result, "returncode", 0) and proc.returncode is None:
+                try:
+                    proc.kill()
+                except (ProcessLookupError, OSError):
+                    pass
         else:
             os.killpg(proc.pid, signal.SIGKILL)
-    except (ProcessLookupError, OSError):
-        pass
+    except (ProcessLookupError, OSError, FileNotFoundError):
+        try:
+            proc.kill()
+        except (ProcessLookupError, OSError):
+            pass
 
 
 async def run_process(command: str | list[str], cwd: Path, timeout: float,
@@ -69,6 +79,7 @@ async def run_process(command: str | list[str], cwd: Path, timeout: float,
             _kill_tree(proc)
             for task in readers:
                 task.cancel()
+            await asyncio.gather(*readers, return_exceptions=True)
             out, err = b"", b""
     if exceeded:
         err += b"\noutput limit exceeded"

@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -28,6 +29,57 @@ def test_worktrees_are_isolated(ws: Workspace, tiny_repo: Path):
     ws.remove_worktree(a)
     ws.remove_worktree(b)
     assert not a.exists() and not b.exists()
+
+
+def test_checkout_into_supports_destination_with_spaces(ws: Workspace, tmp_path):
+    dest = tmp_path / "export with spaces" / "optimized source"
+    ws.checkout_into(ws.head(), dest)
+    assert (dest / "mod.py").is_file()
+    assert "def work" in (dest / "mod.py").read_text()
+
+
+def test_worktree_name_cannot_escape_managed_directory(ws: Workspace):
+    with pytest.raises(LockedFileError, match="invalid worktree name"):
+        ws.create_worktree(ws.head(), "..\\outside")
+
+
+def test_missing_git_has_actionable_error(ws, monkeypatch):
+    import hotpath.workspace as workspace
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(workspace.subprocess, "run", missing)
+    with pytest.raises(RuntimeError, match="git executable was not found"):
+        workspace._git(["status"], ws.target)
+
+
+def test_git_trusts_only_the_exact_worktree_path(ws, monkeypatch):
+    import hotpath.workspace as workspace
+
+    commands = []
+
+    def capture(args, **kwargs):
+        commands.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(workspace.subprocess, "run", capture)
+    workspace._git(["status", "--porcelain"], ws.target)
+    expected = f"safe.directory={ws.target.resolve()}"
+    assert len(commands) == 2
+    assert all(expected in command for command in commands)
+    assert all("safe.directory=*" not in command for command in commands)
+
+
+def test_archive_failure_has_actionable_export_error(ws, tmp_path, monkeypatch):
+    import hotpath.workspace as workspace
+
+    def failed(*args, **kwargs):
+        raise workspace.subprocess.CalledProcessError(128, args[0], stderr=b"bad commit")
+
+    monkeypatch.setattr(workspace.subprocess, "run", failed)
+    with pytest.raises(PatchError, match="bad commit"):
+        ws.checkout_into("missing-commit", tmp_path / "export")
 
 
 def test_apply_edits_and_commit_survive_worktree_removal(ws: Workspace):

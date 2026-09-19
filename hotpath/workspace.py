@@ -37,17 +37,31 @@ def _git(args: list[str], cwd: Path, *, strip: bool = True) -> str:
     env.update(GIT_ENV)
     env.update({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
                 "GIT_TERMINAL_PROMPT": "0", "GIT_ALLOW_PROTOCOL": ""})
-    options = ["-c", f"core.hooksPath={os.devnull}", "-c", "core.fsmonitor=false",
+    # Git may see a target created by another container user as "dubious
+    # ownership". Trust only the exact directory this invocation operates in,
+    # never a wildcard or the target's own local config.
+    options = ["-c", f"safe.directory={cwd.resolve()}",
+               "-c", f"core.hooksPath={os.devnull}", "-c", "core.fsmonitor=false",
                "-c", "core.untrackedCache=false",
                "-c", "core.attributesFile=" + os.devnull]
-    config = subprocess.run(["git", "config", "--local", "--name-only", "--get-regexp", "^filter\\."],
-                            cwd=str(cwd), capture_output=True, text=True, env=env)
+    try:
+        config = subprocess.run(["git", "-c", f"safe.directory={cwd.resolve()}", "config", "--local", "--name-only", "--get-regexp", "^filter\\."],
+                                cwd=str(cwd), capture_output=True, text=True, env=env)
+    except FileNotFoundError as exc:
+        raise RuntimeError("git executable was not found; install Git and ensure it is on PATH") from exc
+    except OSError as exc:
+        raise RuntimeError(f"could not start git in {cwd}: {exc}") from exc
     for key in config.stdout.splitlines():
         # Override every command-bearing filter attribute (and required).
         options += ["-c", key + ("=false" if key.endswith(".required") else "=")]
     if args and args[0] == "diff":
         args = ["diff", "--no-ext-diff", *args[1:]]
-    res = subprocess.run(["git", *options, *args], cwd=str(cwd), capture_output=True, text=True, env=env)
+    try:
+        res = subprocess.run(["git", *options, *args], cwd=str(cwd), capture_output=True, text=True, env=env)
+    except FileNotFoundError as exc:
+        raise RuntimeError("git executable was not found; install Git and ensure it is on PATH") from exc
+    except OSError as exc:
+        raise RuntimeError(f"could not start git in {cwd}: {exc}") from exc
     if res.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} failed in {cwd}: {res.stderr.strip()}")
     return res.stdout.strip() if strip else res.stdout
@@ -162,6 +176,11 @@ class Workspace:
     # -- worktrees ----------------------------------------------------------
     def create_worktree(self, commit: str, name: str) -> Path:
         self._check_workdir()
+        # Worktree names are generated identifiers. Reject path syntax before
+        # constructing the path so cleanup cannot escape the managed directory.
+        if (not name or name in {".", ".."} or "/" in name or "\\" in name
+                or Path(name).name != name or "\x00" in name):
+            raise LockedFileError(f"invalid worktree name: {name!r}")
         self.worktrees_dir.mkdir(parents=True, exist_ok=True)
         path = self.worktrees_dir / name
         if path.exists():
@@ -170,6 +189,9 @@ class Workspace:
         return path
 
     def remove_worktree(self, path: Path) -> None:
+        path = Path(path)
+        if not path.resolve().is_relative_to(self.worktrees_dir.resolve()):
+            raise LockedFileError(f"worktree path escapes managed directory: {path}")
         try:
             _git(["worktree", "remove", "--force", str(path)], self.target)
         except RuntimeError:
@@ -266,7 +288,16 @@ class Workspace:
         """Export a commit's tree to a plain directory (used to hand results to the user)."""
         dest = dest.resolve()
         dest.mkdir(parents=True, exist_ok=True)
-        archive = subprocess.run(["git", "archive", commit], cwd=self.target, capture_output=True, check=True)
+        try:
+            archive = subprocess.run(["git", "archive", commit], cwd=self.target,
+                                     capture_output=True, check=True)
+        except FileNotFoundError as exc:
+            raise PatchError("cannot export checkout: git executable was not found") from exc
+        except subprocess.CalledProcessError as exc:
+            detail = (exc.stderr or b"").decode(errors="replace").strip()
+            raise PatchError(f"cannot export commit {commit}: {detail or 'git archive failed'}") from exc
+        except OSError as exc:
+            raise PatchError(f"cannot export checkout: {exc}") from exc
         with tarfile.open(fileobj=io.BytesIO(archive.stdout), mode="r:") as tar:
             for member in tar:
                 path = safe_target_path(dest, member.name)

@@ -77,6 +77,29 @@ async def test_malformed_patch(harness, ws, baseline):
     assert e.status == ExperimentStatus.patch_failed and "not found" in e.reject_reason
 
 
+@pytest.mark.parametrize("edit, reason", [
+    (Edit(file="mod.py", search="out", replace="value"), "ambiguous"),
+    (Edit(file="missing.py", search="x = 1", replace="x = 2"), "does not exist"),
+    (Edit(file="mod.py", search="", replace="new file"), "already exists"),
+])
+async def test_unapplicable_searches_have_patch_failed_status(harness, ws, baseline, edit, reason):
+    bench, noise = baseline
+    e = await harness.run_experiment(_exp(ws, [edit]), bench, bench, noise)
+    assert e.status == ExperimentStatus.patch_failed and reason in e.reject_reason
+    assert e.correctness is None and e.benchmark is None
+
+
+@pytest.mark.parametrize("edits, expected", [
+    ([], "no edits"),
+    ([Edit(file="mod.py", search="    out = []\n", replace="    out = []\n")], "no change"),
+])
+async def test_empty_and_noop_patches_become_patch_failed(harness, ws, baseline, edits, expected):
+    bench, noise = baseline
+    e = await harness.run_experiment(_exp(ws, edits), bench, bench, noise)
+    assert e.status == ExperimentStatus.patch_failed
+    assert expected in e.reject_reason
+
+
 async def test_test_timeout_becomes_status(harness, ws, baseline, cfg):
     cfg.timeouts.test = 2
     bench, noise = baseline
@@ -95,6 +118,31 @@ async def test_benchmark_that_prints_no_json_is_error_not_crash(harness, ws, bas
     cfg.bench_cmd = "python -c \"print('no measurement')\""
     e = await harness.run_experiment(_exp(ws, [FAST]), bench, bench, noise)
     assert e.status == ExperimentStatus.error and "no valid measurement" in e.reject_reason
+
+
+async def test_benchmark_nonzero_exit_is_recorded_as_error(harness, ws, baseline, cfg):
+    bench, noise = baseline
+    cfg.bench_cmd = "python -c \"import sys; sys.exit(7)\""
+    e = await harness.run_experiment(_exp(ws, [FAST]), bench, bench, noise)
+    assert e.status == ExperimentStatus.error
+    assert "exited 7" in e.reject_reason
+    assert e.commit is None and e.benchmark is None
+
+
+async def test_profile_failure_is_explicit_and_does_not_leak_worktree(harness, ws, cfg):
+    cfg.profile_cmd = "python -c \"import sys; sys.exit(9)\""
+    profile = await harness.run_profile(ws.head())
+    assert profile.tool == "none" and "profile command failed" in profile.note
+    assert not any(ws.worktrees_dir.iterdir())
+
+
+async def test_benchmark_timeout_becomes_status(harness, ws, baseline, cfg):
+    bench, noise = baseline
+    cfg.timeouts.bench = 1
+    cfg.bench_cmd = "python -c \"import time; time.sleep(30)\""
+    e = await harness.run_experiment(_exp(ws, [FAST]), bench, bench, noise)
+    assert e.status == ExperimentStatus.timeout
+    assert "timed out" in e.reject_reason
 
 
 async def test_benchmarks_run_serially_but_tests_in_parallel(harness, ws, store, baseline, cfg, monkeypatch):
