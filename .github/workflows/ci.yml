@@ -1,0 +1,42 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # The harness creates git worktrees and commits in temporary repos, which
+      # needs an identity that a fresh runner does not have.
+      - name: Configure git
+        run: |
+          git config --global user.name "hotpath ci"
+          git config --global user.email "ci@hotpath.invalid"
+          git config --global init.defaultBranch main
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Docker-backed and browser-backed tests skip themselves unless
+      # HOTPATH_TEST_DOCKER=1 / node+playwright are present; everything else,
+      # including the full offline loop on demo_repo, runs here.
+      - name: Test
+        run: pytest -q
