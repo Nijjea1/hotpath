@@ -1,0 +1,13 @@
+{
+  "idea": "Implement top_k as sorted(scores, reverse=True)[:k]",
+  "strategy": "vectorize: batch work or push loops into C-implemented builtins",
+  "target_file": "slowlib.py",
+  "rationale": "Repeated max()+list.remove() is O(k*n) in Python; a single C sort is faster for small k and identical for ties.",
+  "risk": "low",
+  "edits": [{
+    "file": "slowlib.py",
+    "search": "    result = []\n    remaining = list(scores)\n    for _ in range(min(k, len(remaining))):\n        best = max(remaining)\n        result.append(best)\n        remaining.remove(best)\n    return result",
+    "replace": "    return sorted(scores, reverse=True)[:k]"
+  }],
+  "reasoning": "Values are identical: max() picks the largest, remove() drops one copy, repeated k times; sorted()[:k] yields the same multiset in the same descending order. Note: this search text only matches if the micro-tweak patch was NOT accepted first."
+}

@@ -1,0 +1,13 @@
+{
+  "idea": "Track seen items in a set inside dedupe_preserve_order",
+  "strategy": "data structure: use set/dict/deque/Counter instead of list scans",
+  "target_file": "slowlib.py",
+  "rationale": "`item not in out` scans a growing list: O(n^2). A set makes membership O(1) while the list keeps order.",
+  "risk": "low",
+  "edits": [{
+    "file": "slowlib.py",
+    "search": "    out = []\n    for item in items:\n        if item not in out:\n            out.append(item)\n    return out",
+    "replace": "    out = []\n    seen = set()\n    for item in items:\n        if item not in seen:\n            seen.add(item)\n            out.append(item)\n    return out"
+  }],
+  "reasoning": "Membership test moves from list (linear) to set (constant). First-seen order is preserved by still appending to the list. Items must be hashable, which the existing list-based version already relied on for equality."
+}

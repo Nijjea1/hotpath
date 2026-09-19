@@ -1,0 +1,13 @@
+{
+  "idea": "Hoist the min() call out of the top_k loop header",
+  "strategy": "caching: memoize repeated pure computations",
+  "target_file": "slowlib.py",
+  "rationale": "Avoid recomputing min(k, len(remaining)) per call.",
+  "risk": "low",
+  "edits": [{
+    "file": "slowlib.py",
+    "search": "    result = []\n    remaining = list(scores)\n    for _ in range(min(k, len(remaining))):",
+    "replace": "    result = []\n    remaining = list(scores)\n    n_iter = min(k, len(remaining))\n    for _ in range(n_iter):"
+  }],
+  "reasoning": "A micro-change with no measurable effect: range() evaluates its argument once anyway. Expected to land inside the noise band."
+}

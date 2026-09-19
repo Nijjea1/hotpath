@@ -1,0 +1,21 @@
+{
+  "idea": "Replace top_k's repeated max() with heapq.nlargest",
+  "strategy": "vectorize: batch work or push loops into C-implemented builtins",
+  "target_file": "slowlib.py",
+  "rationale": "Repeated max()+remove() is O(k*n); heapq.nlargest is O(n log k).",
+  "risk": "low",
+  "edits": [{
+    "file": "slowlib.py",
+    "search": "def top_k(scores, k):\n    return sorted(scores, reverse=True)[:k]",
+    "replace": "def top_k(scores, k):\n    import heapq\n    return heapq.nlargest(k, scores)"
+  }],
+  "reasoning": "The worker hallucinated the current body of top_k, so the search text will not match. The harness must report a clean patch failure.",
+  "retry": {
+    "edits": [{
+      "file": "slowlib.py",
+      "search": "    result = []\n    remaining = list(scores)\n    for _ in range(min(k, len(remaining))):\n        best = max(remaining)\n        result.append(best)\n        remaining.remove(best)\n    return result",
+      "replace": "    import heapq\n    return heapq.nlargest(k, scores)"
+    }],
+    "reasoning": "The first attempt searched for code that was not there. With the failure fed back, the worker reads the real body of top_k (the max()+remove() loop) and replaces it with heapq.nlargest, which is correct (same ties and ordering) and O(n log k)."
+  }
+}
