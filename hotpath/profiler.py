@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from hotpath.schema import Hotspot, ProfileSummary
+from hotpath.schema import Hotspot, ProfileFrame, ProfileSummary
 
 
 class ProfileParseError(Exception):
@@ -53,6 +53,9 @@ def parse_profile_output(stdout: str, retain: int, commit: str = "") -> ProfileS
         # cut, since rows are sorted by self time. An untruncated profile omits nothing, so the
         # bound is zero and the diff may speak of true eliminations.
         cutoff_self_time=kept[-1].self_time if kept and (len(kept) < n_total or not known) else 0.0,
+        flamegraph=[ProfileFrame(**frame) for frame in obj.get("flamegraph", [])],
+        flamegraph_source=str(obj.get("flamegraph_source", "")),
+        flamegraph_unavailable_reason=str(obj.get("flamegraph_unavailable_reason", "")),
     )
 
 

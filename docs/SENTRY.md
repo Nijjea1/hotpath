@@ -27,6 +27,26 @@ The repository tests cover SDK setup and envelope construction with an in-memory
 transport. They do not prove delivery or visibility in a Sentry project. Confirm those
 two properties in the target Sentry project after adding a real DSN.
 
+## Connected validation gate
+
+Connected validation is an external release check. It requires a temporary DSN in
+the local environment; never commit it or place it in a run artifact. After setting
+the DSN, verify all of the following in the same Sentry project:
+
+1. `/api/observability` reports `enabled: true`.
+2. `/sentry-debug` creates one error event, one transaction with the verification
+   span, verification logs, and verification metrics.
+3. A short optimization run creates a `hotpath.run` transaction and one
+   `hotpath.experiment` transaction per experiment, linked by `hotpath.run_id`.
+4. The planner or worker call appears as a `gen_ai.chat` span with model and token
+   usage fields, without source code or prompts attached.
+5. The run's trace, logs, and metrics are visible after `hotpath flush` or process
+   shutdown.
+
+Record the run identifier and the actual debugging decision in
+`docs/SENTRY_MOMENTS.md`. Until this checklist has been completed with a real
+project, describe Sentry as instrumented and locally tested rather than connected.
+
 ## Settings
 
 ```dotenv

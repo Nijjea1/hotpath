@@ -125,9 +125,13 @@ class Agent:
                         new_files=new_files,
                         related_context=related_context[:4000] + ("\n[Related context truncated]" if len(related_context) > 4000 else ""),
                         editable=self.cfg.editable, locked=self.cfg.locked,
+                        experiment_id=exp.id,
                         correctness_contract=getattr(self.cfg, "correctness_contract", "Preserve all externally observable behavior."),
                         previous_edits=getattr(exp, "previous_edits", []),
-                        previous_failure=failures.get(exp.id, exp.previous_failure))
+                        previous_failure=failures.get(exp.id, exp.previous_failure),
+                        parent_commit=exp.parent_commit,
+                        history=[item for item in self.store.list_experiments(exp.run_id)
+                                 if item.id != exp.id][-self.cfg.context.history_limit:])
                     with obs.span("hotpath.generate", exp.hypothesis.idea, provider=self.worker.name,
                                   experiment_id=exp.id):
                         resp = await asyncio.wait_for(self.worker.generate_patch(req), timeout=self.cfg.timeouts.model)

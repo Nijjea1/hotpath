@@ -62,6 +62,17 @@ def test_environment_loading_and_no_dsn(monkeypatch, tmp_path):
     assert os.environ["HOTPATH_ENV"] == "from_file"
 
 
+def test_no_dsn_is_a_complete_noop_even_with_dotenv(monkeypatch, tmp_path):
+    """An explicit empty DSN disables setup and prevents SDK initialization."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(obs, "_enabled", False)
+    (tmp_path / ".env").write_text("SENTRY_DSN=https://public@example.invalid/1\n")
+    monkeypatch.setenv("SENTRY_DSN", "")
+    monkeypatch.setattr(sentry_sdk, "init", lambda **kwargs: pytest.fail("SDK initialized without a DSN"))
+    assert obs.init_sentry() is False
+    assert obs.enabled() is False
+
+
 def test_disabled_wrappers_never_touch_global_sdk(monkeypatch):
     monkeypatch.setattr(obs, "_enabled", False)
     def forbidden(*args, **kwargs):

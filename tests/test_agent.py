@@ -77,15 +77,24 @@ async def test_retry_request_includes_contract_and_attempt(cfg, store):
     provider = FakeProvider(patches=[PatchResponse(edits=[], reasoning="no safe change")])
     agent = Agent(cfg, provider, provider, None, store)
     prior = Edit(file="mod.py", search="return x", replace="return x + 1")
-    exp = Experiment(run_id="run", iteration=1, hypothesis=hypothesis(), previous_failure="token mismatch", previous_edits=[prior])
+    earlier = Experiment(run_id="run", iteration=1, hypothesis=hypothesis(), parent_commit="base")
+    earlier.set_status(ExperimentStatus.rejected_correctness, "cache shape mismatch")
+    store.save_experiment(earlier)
+    exp = Experiment(run_id="run", iteration=1, hypothesis=hypothesis(), parent_commit="head123",
+                     previous_failure="token mismatch", previous_edits=[prior])
     await agent.generate_patches([exp], Path(cfg.target), "context" * 1000)
     request = provider.patch_requests[0]
     assert request.previous_edits == [prior]
     assert request.previous_failure == "token mismatch"
     assert request.target_source == (Path(cfg.target) / "mod.py").read_text()
+    assert request.parent_commit == "head123"
+    assert [item.id for item in request.history] == [earlier.id]
     assert request.source_complete
     prompt = worker_messages(request)[1]["content"]
     assert cfg.correctness_contract in prompt and "return x + 1" in prompt
+    assert "Parent commit: head123" in prompt
+    assert "cache shape mismatch" in prompt
+    assert "locate its exact `search`" in worker_messages(request)[0]["content"]
     assert "Related context truncated" in prompt
 
 

@@ -36,8 +36,8 @@ def test_full_evidence_roundtrip_after_reopen(store, cfg):
     from hotpath.benchmark import compute_stats, compare
     from hotpath.schema import Edit, ProfileSummary, Hotspot
     from hotpath.config import config_snapshot
-    base = compute_stats([10, 11, 10])
-    candidate = compute_stats([4, 4.1, 4])
+    base = compute_stats([10, 11, 10], workload_samples={"short": [10, 11, 10], "long": [20, 21, 20]})
+    candidate = compute_stats([4, 4.1, 4], workload_samples={"short": [4, 4.1, 4], "long": [8, 8.2, 8]})
     profile = ProfileSummary(tool="cProfile", commit="base", total_time=1,
         hotspots=[Hotspot(function="f", file="f.py", self_time=.5, total_time=.5, pct=50)],
         retained=1, n_functions_total=10, completeness_known=True, cutoff_self_time=.5)
@@ -55,6 +55,67 @@ def test_full_evidence_roundtrip_after_reopen(store, cfg):
     reopened = Store(store.path)
     assert reopened.get_run(run.id) == run
     assert reopened.get_experiment(retry.id) == retry
+    assert reopened.get_experiment(retry.id).benchmark.workload_samples == {
+        "short": [4.0, 4.1, 4.0], "long": [8.0, 8.2, 8.0]
+    }
+    # This config has no required workloads, so the comparison intentionally has none.
+    assert reopened.get_experiment(retry.id).comparison.workload_ratios == {}
+
+
+def test_workload_ratios_and_stats_survive_resume(store, cfg):
+    """A resumed run must retain the evidence used for a multi-workload verdict."""
+    from hotpath.benchmark import compute_stats, compare
+
+    cfg.benchmark.required_workloads = ["short", "long"]
+    base = compute_stats([10, 10, 10], metric="tokens/sec", higher_is_better=True,
+                         workload_samples={"short": [10, 10, 10], "long": [20, 20, 20]})
+    candidate = compute_stats([12, 12, 12], metric="tokens/sec", higher_is_better=True,
+                              workload_samples={"short": [12, 12, 12], "long": [24, 24, 24]})
+    comparison = compare(base, candidate, base, cfg.benchmark, 0.0)
+    run = RunState(config_name="resume", target="/t", baseline_benchmark=base,
+                   head_benchmark=candidate, best_speedup=comparison.speedup_vs_baseline)
+    exp = Experiment(run_id=run.id, iteration=1, hypothesis=H, parent_benchmark=base,
+                      benchmark=candidate, comparison=comparison)
+    store.save_run(run)
+    store.save_experiment(exp)
+
+    resumed = Store(store.path)
+    loaded_run = resumed.get_run(run.id)
+    loaded_exp = resumed.get_experiment(exp.id)
+    assert loaded_run.baseline_benchmark.workload_samples["long"] == [20.0, 20.0, 20.0]
+    assert loaded_run.head_benchmark.workload_samples["short"] == [12.0, 12.0, 12.0]
+    assert loaded_exp.comparison.workload_ratios == {"short": 1.2, "long": 1.2}
+
+
+def test_legacy_benchmark_payload_defaults_new_evidence_fields(store):
+    """Runs written before workload evidence was introduced remain readable."""
+    import json
+    from hotpath.schema import BenchmarkStats, SpeedComparison
+
+    run = RunState(config_name="legacy-evidence", target="/t")
+    payload = run.model_dump(mode="json")
+    payload["baseline_benchmark"] = BenchmarkStats(samples=[1, 1.1], n=2, median=1,
+                                                     mean=1.05, stdev=.05, cv=.05).model_dump(mode="json")
+    payload["head_benchmark"] = payload["baseline_benchmark"]
+    raw_comparison = SpeedComparison(speedup_vs_parent=1.1, speedup_vs_baseline=1.1,
+                                     ci_low=1.01, ci_high=1.2, threshold=1.03,
+                                     significant=True, reason="legacy").model_dump(mode="json")
+    exp = Experiment(run_id=run.id, iteration=1, hypothesis=H,
+                     comparison=SpeedComparison.model_validate(raw_comparison))
+    with store._conn() as conn:
+        conn.execute("INSERT INTO runs VALUES (?,?,?,?,?)",
+                     (run.id, run.status, run.created_at.isoformat(), run.updated_at.isoformat(),
+                      json.dumps(payload)))
+        conn.execute("INSERT INTO experiments VALUES (?,?,?,?,?,?,?,?)",
+                     (exp.id, exp.run_id, exp.parent_id, exp.iteration, exp.status.value,
+                      exp.created_at.isoformat(), exp.updated_at.isoformat(),
+                      json.dumps({**exp.model_dump(mode="json"),
+                                  "comparison": {k: v for k, v in raw_comparison.items()
+                                                  if k != "workload_ratios"}})))
+    loaded_run = store.get_run(run.id)
+    loaded_exp = store.get_experiment(exp.id)
+    assert loaded_run.baseline_benchmark.workload_samples == {}
+    assert loaded_exp.comparison.workload_ratios == {}
 
 
 def test_legacy_payload_defaults(store):

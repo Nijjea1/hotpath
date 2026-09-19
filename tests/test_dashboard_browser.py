@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from hotpath.schema import BenchmarkStats, Experiment, ExperimentStatus, Hypothesis, RunState
+from hotpath.schema import BenchmarkStats, CorrectnessResult, Experiment, ExperimentStatus, Hypothesis, ProfileSummary, RunState
 from server.views import build_chart, build_funnel, build_tree
 
 
@@ -23,11 +23,18 @@ def test_dashboard_browser():
                            n=3, median=100, mean=100, stdev=1, cv=.01)
     run = RunState(config_name='<img src=x onerror="window.injected=1">', target=".",
                    baseline_benchmark=bench, head_benchmark=bench, base_commit="abc", head_commit="abc")
+    run.head_profile = ProfileSummary(
+        tool="torch.profiler (cpu-time fallback)", commit="abc",
+        flamegraph_source="torch.profiler CPU event tree",
+        flamegraph=[{"function": "decode <unsafe>", "self_time": 0.2, "total_time": 1.0, "calls": 1,
+                     "children": [{"function": "attention", "self_time": 0.8, "total_time": 0.8,
+                                   "calls": 1}]}],
+    )
     exp = Experiment(run_id=run.id, hypothesis=Hypothesis(idea="candidate", strategy="s",
                      target_file="mod.py", rationale="r", risk="low"), iteration=1,
                      status=ExperimentStatus.rejected_correctness,
                      reject_reason="Exact reason: output 42 differs from expected 41 <unsafe>",
-                     benchmark=bench)
+                     correctness=CorrectnessResult(passed=False, exit_code=1, duration_s=0.1))
     payload = {
         "html": (Path(__file__).parents[1] / "server/static/index.html").read_text(encoding="utf-8"),
         "data": {"run": run.model_dump(mode="json"), "experiments": [exp.model_dump(mode="json")], "live": False},

@@ -1,4 +1,6 @@
 """The bottleneck diff's job is to not overclaim. These tests are mostly about what it refuses to say."""
+import json
+
 import pytest
 
 from hotpath.profilediff import DEFAULT_EPSILON, diff_profiles, render
@@ -94,6 +96,44 @@ def test_real_producer_reports_total_before_truncation(capsys):
     assert raw["n_functions_total"] > 1 and raw["completeness_known"]
     parsed = parse_profile_output(json.dumps(raw), retain=40)
     assert parsed.cutoff_self_time > 0
+    assert "aggregated caller edges" in parsed.flamegraph_unavailable_reason
+
+
+def test_parser_preserves_an_observed_nested_event_tree():
+    raw = {
+        "hotpath_profile": 1, "tool": "torch.profiler (cpu-time fallback)",
+        "total_time": 1.0, "n_functions_total": 1, "completeness_known": True,
+        "hotspots": [{"function": "root", "file": "", "line": 0, "self_time": 0.2,
+                      "total_time": 1.0, "pct": 20.0, "calls": 1}],
+        "flamegraph_source": "torch.profiler CPU event tree",
+        "flamegraph": [{"function": "root", "self_time": 0.2, "total_time": 1.0, "calls": 1,
+                        "children": [{"function": "child", "self_time": 0.8, "total_time": 0.8,
+                                      "calls": 1}]}],
+    }
+    parsed = parse_profile_output(json.dumps(raw), retain=40)
+    assert parsed.flamegraph_source == "torch.profiler CPU event tree"
+    assert parsed.flamegraph[0].function == "root"
+    assert parsed.flamegraph[0].children[0].function == "child"
+
+
+def test_torch_event_tree_uses_only_observed_parentage():
+    from hotpath.profilelib import _torch_cpu_event_tree
+
+    class Event:
+        def __init__(self, key, self_us, total_us, parent=None):
+            self.key, self.self_cpu_time_total, self.cpu_time_total = key, self_us, total_us
+            self.cpu_parent, self.cpu_children = parent, []
+            if parent:
+                parent.cpu_children.append(self)
+
+    root, child, sibling = Event("decode", 10, 100), None, None
+    child = Event("attention", 70, 80, root)
+    sibling = Event("sample", 30, 30)
+    tree = _torch_cpu_event_tree([root, child, sibling], max_events=10)
+    assert [frame["function"] for frame in tree] == ["decode", "sample"]
+    assert tree[0]["children"] == [{"function": "attention", "file": "", "line": 0,
+                                     "self_time": 0.00007, "total_time": 0.00008,
+                                     "calls": 1, "children": []}]
 
 
 # --------------------------------------------------------------------------- #

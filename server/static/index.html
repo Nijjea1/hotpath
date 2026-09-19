@@ -130,6 +130,12 @@ tr.row.isretry td:first-child{border-left:2px solid var(--ai)}
 .prof .flame .tot.ro{background:rgba(92,108,124,.18);border-color:var(--dim)}
 .prof .flame .tot .self{height:100%;background:var(--hot)}
 .prof .flame .tot.ro .self{background:var(--dim)}
+.flamegraph{overflow:auto;border:1px solid var(--line);border-radius:4px;background:var(--bg)}
+.flamegraph svg{display:block;min-width:540px}
+.flamegraph .frame{stroke:var(--bg);stroke-width:1;cursor:default}
+.flamegraph .frame.self{fill:var(--hot)}
+.flamegraph .frame.outer{fill:var(--hot-soft);stroke:var(--hot)}
+.flamegraph text{fill:var(--ink);font:11px var(--mono);pointer-events:none}
 /* --- bottleneck diff --- */
 .bnhead{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px}
 .bnhead .box{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
@@ -235,11 +241,11 @@ tr.row.isretry td:first-child{border-left:2px solid var(--ai)}
         <div class="body" id="contract"></div>
       </div>
       <div class="card">
-        <h2>Bottleneck diff <span class="right hint" id="bnTool"></span></h2>
+        <h2>Hotspot comparison <span class="right hint" id="bnTool"></span></h2>
         <div class="body" id="bottleneck"></div>
       </div>
       <div class="card">
-        <h2>Profile of current head <span class="right hint" id="profTool"></span></h2>
+        <h2 id="profileTitle">Profile hotspots <span class="right hint" id="profTool"></span></h2>
         <div class="body" id="profile"></div>
       </div>
       <div class="card">
@@ -378,7 +384,18 @@ function render() {
   $("#stopBtn").style.display = d.live ? "" : "none";
   const st = $("#status"); st.className = "status " + (run ? (d.live ? "running" : run.status) : "");
   $("#statusText").textContent = run ? (d.live ? `running · iteration ${run.iteration}/${run.total_iterations}` : run.status + (run.error ? " · " + run.error : "")) : "no run";
-  if (!run) { $("#stats").innerHTML = ""; $("#tree").innerHTML = ""; $("#expTable tbody").innerHTML = ""; $("#runlog").textContent = d.config ? `Ready. Target: ${d.config.target}` : ""; return; }
+  if (!run) {
+    $("#stats").innerHTML = ""; $("#tree").innerHTML = ""; $("#expTable tbody").innerHTML = "";
+    $("#detail").innerHTML = `<div class="empty">Start a run or select a stored run</div>`;
+    $("#contract").innerHTML = d.config ? `<div class="hint">Ready. Target: ${esc(d.config.target)}</div>` : "";
+    $("#bottleneck").innerHTML = `<div class="hint">No run selected.</div>`;
+    $("#profile").innerHTML = `<div class="hint">No run selected.</div>`;
+    $("#funnel").innerHTML = ""; $("#chartNote").textContent = "";
+    $("#chartTitle").textContent = "Progress"; $("#chartHint").textContent = "";
+    const canvas = $("#chart"); canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+    $("#runlog").textContent = d.config ? `Ready. Target: ${d.config.target}` : "";
+    return;
+  }
   const exps = d.experiments;
   renderStats(run, exps); renderTree(); renderChart(); renderTable(exps);
   renderBottleneck(); renderProfile(run); renderFunnel(); renderContract(d.config); renderDetail(run, exps);
@@ -688,8 +705,17 @@ function renderBottleneck() {
 
 function renderProfile(run) {
   const p = run.head_profile; const el = $("#profile");
-  if (!p || !p.hotspots.length) { el.innerHTML = `<div class="hint">${esc(p && p.note || "no profile yet")}</div>`; return; }
+  const title = $("#profileTitle");
+  if (!p) { title.firstChild.textContent = "Profile hotspots "; el.innerHTML = `<div class="hint">no profile yet</div>`; return; }
   $("#profTool").textContent = `${p.tool} · ${p.commit.slice(0,8)}`;
+  if (p.flamegraph && p.flamegraph.length) {
+    title.firstChild.textContent = "Call-stack flame graph ";
+    el.innerHTML = renderFlamegraph(p.flamegraph)
+      + `<div class="hint" style="margin-top:8px">${esc(p.flamegraph_source || "observed profiler event tree")}. Each rectangle is an observed nested event; width is cumulative time and solid fill is self time.</div>`;
+    return;
+  }
+  title.firstChild.textContent = "Profile hotspots ";
+  if (!p.hotspots.length) { el.innerHTML = `<div class="hint">${esc(p.note || "no profile yet")}</div>`; return; }
   const rows = p.hotspots.slice(0, 12);
   const maxTot = Math.max(...rows.map(h => h.total_time || h.self_time || 0)) || 1;
   el.innerHTML = `<div class="prof">` + rows.map(h => {
@@ -702,7 +728,43 @@ function renderProfile(run) {
       + `<div class="flame" title="${esc(title)}"><div class="tot ${h.file ? "" : "ro"}" style="width:${totW.toFixed(1)}%"><div class="self" style="width:${selW.toFixed(1)}%"></div></div></div>`
       + `<div class="mono">${h.pct.toFixed(1)}%</div>`;
   }).join("") + `</div><div class="hint" style="margin-top:8px">Bar width = total (cumulative) time; solid fill = self time, the remainder is time in callees. Amber = target code, grey = C builtins.
-    ${p.retained && p.n_functions_total > p.retained ? `Showing 12 of ${p.retained} retained (${p.n_functions_total} profiled).` : ""}</div>`;
+    ${p.retained && p.n_functions_total > p.retained ? `Showing 12 of ${p.retained} retained (${p.n_functions_total} profiled).` : ""}
+    ${esc(p.flamegraph_unavailable_reason || "This run has flat hotspot data only; a call-stack flame graph was not captured.")}</div>`;
+}
+
+function renderFlamegraph(roots) {
+  const W = 960, H = 24, PAD = 4;
+  const maxDepth = frames => frames.reduce((depth, f) => Math.max(depth, 1 + maxDepth(f.children || [])), 0);
+  const depth = Math.max(1, maxDepth(roots));
+  const height = PAD * 2 + depth * H;
+  const rootTotal = roots.reduce((sum, f) => sum + Math.max(0, f.total_time || 0), 0) || 1;
+  let x = PAD, out = "";
+  function draw(frame, left, width, level) {
+    const total = Math.max(0, frame.total_time || 0);
+    const self = Math.max(0, Math.min(total, frame.self_time || 0));
+    const y = PAD + level * H;
+    const label = `${frame.function} — total ${fmtSeconds(total)}, self ${fmtSeconds(self)}, ${frame.calls || 0} call(s)`;
+    out += `<g><title>${esc(label)}</title><rect class="frame outer" x="${left.toFixed(2)}" y="${y}" width="${Math.max(1, width).toFixed(2)}" height="${H - 2}" rx="2"/>`;
+    if (self > 0) out += `<rect class="frame self" x="${left.toFixed(2)}" y="${y}" width="${Math.max(1, width * self / (total || 1)).toFixed(2)}" height="${H - 2}" rx="2"/>`;
+    if (width > 72) out += `<text x="${(left + 5).toFixed(2)}" y="${y + 15}">${esc(trunc(frame.function, Math.max(8, Math.floor(width / 7))))}</text>`;
+    out += `</g>`;
+    const children = frame.children || [];
+    const childTotal = children.reduce((sum, c) => sum + Math.max(0, c.total_time || 0), 0);
+    // A child's total is a share of its parent, leaving the unclaimed width to show parent self
+    // time. Some profiler event streams overlap children, so compress only that inconsistent case
+    // to keep rectangles inside their observed parent rather than overflowing the SVG.
+    const childScale = childTotal > total && childTotal > 0 ? total / childTotal : 1;
+    let childX = left;
+    for (const child of children) {
+      const childWidth = width * Math.max(0, child.total_time || 0) * childScale / (total || 1);
+      draw(child, childX, childWidth, level + 1); childX += childWidth;
+    }
+  }
+  for (const root of roots) {
+    const width = (W - PAD * 2) * Math.max(0, root.total_time || 0) / rootTotal;
+    draw(root, x, width, 0); x += width;
+  }
+  return `<div class="flamegraph"><svg role="img" aria-label="Observed call-stack flame graph" viewBox="0 0 ${W} ${height}" height="${height}">${out}</svg></div>`;
 }
 
 // Every file a hypothesis may touch: its target first, then any extra (possibly new) files.
@@ -749,8 +811,10 @@ function renderDetail(run, exps) {
   const parent = e.parent_id ? exps.find(x => x.id === e.parent_id) : null;
   const parentBench = e.parent_benchmark || (parent ? parent.benchmark : run.baseline_benchmark);
   const original = e.retry_of ? exps.find(x => x.id === e.retry_of) : null;
+  const stage = verificationStage(e);
   el.innerHTML = `
     <div class="verdict ${k === "rejected" ? "bad" : k === "pending" ? "wait" : "ok"}"><b>${esc(verdictTitle)}</b>${esc(e.reject_reason || (c ? c.reason : ""))}</div>
+    <div class="hint" style="margin:8px 0"><b>Verification stage:</b> ${esc(stage)}</div>
     <dl class="kv"><dt>id</dt><dd class="mono">${esc(e.id)}</dd><dt>parent</dt><dd class="mono">${esc(e.parent_id || "baseline")}</dd>
       ${e.retry_of ? `<dt>retry of</dt><dd class="mono">${esc(e.retry_of)}${original ? ` <span class="hint">(${esc(original.status)})</span>` : ""}</dd>` : ""}
       <dt>strategy</dt><dd>${esc(e.hypothesis.strategy)}</dd><dt>${hypFiles(e).length > 1 ? "files" : "target"}</dt><dd class="mono">${esc(hypFiles(e).join("  "))}</dd>
@@ -767,6 +831,18 @@ function renderDetail(run, exps) {
     ${e.correctness ? `<div class="section">Correctness (${e.correctness.passed ? "passed" : "failed"} · exit ${e.correctness.exit_code} · ${e.correctness.duration_s.toFixed(1)}s)</div><pre>${esc(e.correctness.output_tail.split("\n").slice(-14).join("\n"))}</pre>` : ""}
     ${e.diff ? `<div class="section">Diff (${esc(e.files_changed.join(", "))})</div><pre class="diff">${diffHtml(e.diff)}</pre>` : e.edits.length ? `<div class="section">Proposed edits (not applied)</div><pre>${esc(e.edits.map(x => `--- ${x.file}\n- ${x.search}\n+ ${x.replace}`).join("\n\n"))}</pre>` : ""}
     <div class="section">Log</div><pre>${esc(e.logs.join("\n"))}</pre>`;
+}
+
+// This names the evidence that actually exists for the selected node. In particular, a correctness
+// rejection must never sound as if Hotpath also measured its speed.
+function verificationStage(e) {
+  if (e.benchmark) return e.correctness ? "correctness ran; benchmark ran" : "benchmark record available";
+  if (e.correctness) return e.correctness.passed ? "correctness passed; benchmark did not run" : "correctness failed; benchmark did not run";
+  if (e.status === "locked_file") return "patch blocked by locked-file policy; tests and benchmark did not run";
+  if (e.status === "patch_failed") return "patch did not apply; tests and benchmark did not run";
+  if (e.status === "timeout") return "attempt timed out before a complete verdict";
+  if (e.status === "error") return "attempt errored before a complete verdict";
+  return "patch or verification still in progress";
 }
 
 function diffHtml(d) {

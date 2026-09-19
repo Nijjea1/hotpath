@@ -33,9 +33,14 @@ class PatchRequest:
     related_context: str
     editable: list[str]
     locked: list[str]
+    experiment_id: str = ""
     previous_failure: str = ""
     correctness_contract: str = "Preserve all externally observable behavior."
     previous_edits: list[Edit] = field(default_factory=list)
+    # The worker needs enough lineage to avoid reintroducing a known-bad change on
+    # a different beam head.  These are evidence, not instructions from the model.
+    parent_commit: str | None = None
+    history: list[Experiment] = field(default_factory=list)
     source_complete: bool = True
     extra: dict = field(default_factory=dict)
     extra_sources: dict[str, str] = field(default_factory=dict)  # complete text of the other existing files
