@@ -1,0 +1,8 @@
+
+.hotpath/
+__pycache__/
+
+.hotpath/
+__pycache__/
+.env
+.env.*
