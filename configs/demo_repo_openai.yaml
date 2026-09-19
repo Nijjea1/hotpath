@@ -1,0 +1,19 @@
+# Same target, real models. Requires OPENAI_API_KEY. Set worker_base_url to point workers at Baseten.
+name: demo_repo_openai
+target: ../demo_repo
+test_cmd: python tests/check.py
+bench_cmd: python bench.py
+profile_cmd: python hotprofile.py
+editable: ["*.py"]
+locked: ["tests/*", "bench.py", "hotprofile.py", "data.py"]
+search: {iterations: 3, candidates_per_iteration: 3, max_parallel_workers: 4}
+provider:
+  planner: openai
+  worker: openai
+  planner_model: gpt-4.1
+  worker_model: gpt-4.1-mini
+  # worker_base_url: https://model-xxxx.api.baseten.co/environments/production/sync/v1
+  # worker_api_key_env: BASETEN_API_KEY
+
+# Trusted bundled demo only; use the Docker config for arbitrary repositories.
+execution: {backend: local}
