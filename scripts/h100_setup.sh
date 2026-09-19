@@ -16,6 +16,12 @@ if ! command -v nvidia-smi >/dev/null || ! nvidia-smi; then
 fi
 
 say "2/6  Python env + install"
+# The Baseten workstation image ships without git, a `python` alias, or the venv module.
+if ! command -v python >/dev/null || ! python -c "import venv, ensurepip" 2>/dev/null; then
+  echo "installing python3-venv / python-is-python3 / git..."
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git python3-venv python3-pip python-is-python3 curl
+fi
 python -m venv .venv
 # shellcheck disable=SC1091
 source .venv/bin/activate
@@ -38,6 +44,9 @@ if [ ! -f .env ]; then
   echo "  EOF"
   exit 1
 fi
+# A .env written on Windows carries CRLF endings (and sometimes a BOM). Sourced as-is, every key
+# ends in "\r", httpx rejects the header, and every worker call fails as "APIConnectionError".
+sed -i 's/\r$//; 1s/^\xEF\xBB\xBF//' .env
 set -a; . ./.env; set +a
 : "${OPENAI_API_KEY:?OPENAI_API_KEY missing in .env}"
 : "${BASETEN_API_KEY:?BASETEN_API_KEY missing in .env}"
@@ -50,7 +59,9 @@ say "6/6  Optimization search on the H100"
 hotpath run configs/dryft_local.yaml --autocommit
 
 say "Export"
-hotpath export configs/dryft_local.yaml submission/ --ablate || true
+if ! hotpath export configs/dryft_local.yaml submission/ --ablate; then
+  echo "!! export failed (no accepted change, or ablation error) -- see the output above"; exit 1
+fi
 echo ""
 echo "Done. Baseline vs optimized tokens/sec and the accepted chain are in: submission/REPORT.md"
 echo "Watch live next time with:  hotpath serve configs/dryft_local.yaml   (then ssh -L 8765:localhost:8765 ...)"
