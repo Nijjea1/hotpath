@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.env
+.worktrees/
+.tmp/
+# per-target state (worktrees + sqlite) and the git repos hotpath creates inside targets
+demo_repo/.hotpath/
+demo_repo/.git/
+targets/*/.hotpath/
+targets/*/.git/
