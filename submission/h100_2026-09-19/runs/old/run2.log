@@ -1,0 +1,1 @@
+hotpath run run_ae4fda0da7 on /root/hotpath/targets/torch_transformer (planner=openai:gpt-4.1, worker=compat:moonshotai/Kimi-K2.7-Code)

@@ -1,0 +1,163 @@
+hotpath run run_7522558b61 on /root/hotpath/targets/torch_transformer (planner=openai:gpt-4.1, worker=compat:moonshotai/Kimi-K2.7-Code)
+06:53:48 INFO httpx2: HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+06:53:50 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:53:50 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:53:51 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:53:52 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:54:29 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:54:30 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:55:03 INFO httpx2: HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+06:55:05 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:55:05 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:55:08 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:55:11 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:55:52 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:55:54 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:56:07 INFO httpx2: HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+06:56:12 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:56:17 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:56:37 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:57:03 INFO httpx2: HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+06:57:05 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:57:05 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:57:05 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:57:06 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:57:55 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:58:03 INFO httpx2: HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+06:58:05 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:58:06 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:58:09 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:58:09 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:59:00 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:59:16 INFO httpx2: HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+06:59:18 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:59:18 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:59:21 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:59:23 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:59:55 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:59:56 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:00:20 INFO httpx2: HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+07:00:22 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:00:22 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:00:22 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:00:24 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:01:00 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:01:00 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:01:23 INFO httpx2: HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+07:01:25 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:01:25 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:01:25 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:01:29 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:02:13 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:02:33 INFO httpx2: HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+07:02:35 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:02:35 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:02:36 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:02:36 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:03:21 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:03:22 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:03:48 INFO httpx2: HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+07:03:49 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:03:50 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:03:50 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:03:51 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:04:52 INFO httpx2: HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+07:04:54 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:04:54 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:04:55 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:04:55 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+07:05:43 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+  06:53:01 target /root/hotpath/targets/torch_transformer
+  06:53:01 base commit 74d8af7f
+  06:53:38 baseline median 916.00052 tokens_per_s, run-to-run noise CV 3.19%
+  06:53:43 profile: 25 hotspots (torch.profiler)
+  06:53:48 planner (openai:gpt-4.1) proposed 4 hypotheses in 4.9s
+  06:54:27 exp_e28ae6b79a [rejected_correctness] Replace manual attention math in Attention.forward with torch.nn.functional.scaled_dot_product_attention (SDPA). (tests failed (exit 1))
+  06:54:27 exp_c1091fa768 [rejected_speed] Preallocate the KV cache tensor in Attention.forward to max sequence length and write new keys/values in place instead of concatenating with torch.cat each step. (slower: 0.983x vs parent)
+  06:54:27 exp_b900006822 [rejected_correctness] Remove .item() call to avoid CPU-GPU sync in the generate loop; keep the next token on device. (tests failed (exit 1))
+  06:54:27 exp_35fb1f40d9 [accepted] Cache the causal mask or skip mask construction in single-token decoding path in Attention.forward.
+  06:54:27 retrying exp_e28ae6b79a [rejected_correctness] -> exp_8ce1dcd7d0 (attempt 1)
+  06:54:27 retrying exp_b900006822 [rejected_correctness] -> exp_dc1641cd61 (attempt 1)
+  06:54:48 exp_8ce1dcd7d0 [retry of exp_e28ae6b79a] [rejected_correctness] Replace manual attention math in Attention.forward with torch.nn.functional.scaled_dot_product_attention (SDPA). (tests failed (exit 1))
+  06:54:48 exp_dc1641cd61 [retry of exp_b900006822] [accepted] Remove .item() call to avoid CPU-GPU sync in the generate loop; keep the next token on device.
+  06:54:53 new head exp_35fb1f40d9: 1.226x vs baseline
+  06:55:03 planner (openai:gpt-4.1) proposed 4 hypotheses in 3.9s
+  06:55:49 exp_5b3614a33a [rejected_correctness] Compile the TinyGPT forward method with torch.compile using mode='reduce-overhead' to reduce Python/kernel launch overhead. (tests failed (exit 1))
+  06:55:49 exp_a1a1f5acae [rejected_correctness] Fuse LayerNorm and elementwise addition into a single kernel in Block.forward by writing a custom kernel or function for x + LayerNorm(x). (tests failed (exit 1))
+  06:55:49 exp_d0ee72e40c [rejected_speed] Fuse the two matmul operations in Attention.forward (q@k^T and att@v) using a custom CUDA/Triton kernel specialized for single-token decode (T=1), optimizing the use case where masking is no-op and shapes are fixed. (slower: 0.938x vs parent)
+  06:55:49 exp_a8a962c238 [rejected_speed] Enable TF32 precision for matmul operations in Attention and MLP Linear layers if device supports it by setting torch.backends.cuda.matmul.allow_tf32 = True at model init. (slower: 0.974x vs parent)
+  06:55:49 retrying exp_5b3614a33a [rejected_correctness] -> exp_f5352fcf40 (attempt 1)
+  06:55:49 retrying exp_a1a1f5acae [rejected_correctness] -> exp_24499aa25f (attempt 1)
+  06:56:03 exp_f5352fcf40 [retry of exp_5b3614a33a] [rejected_correctness] Compile the TinyGPT forward method with torch.compile using mode='reduce-overhead' to reduce Python/kernel launch overhead. (tests failed (exit 1))
+  06:56:03 exp_24499aa25f [retry of exp_a1a1f5acae] [rejected_correctness] Fuse LayerNorm and elementwise addition into a single kernel in Block.forward by writing a custom kernel or function for x + LayerNorm(x). (tests failed (exit 1))
+  06:56:07 planner (openai:gpt-4.1) proposed 2 hypotheses in 4.4s
+  06:56:30 exp_8862ee9e1b [rejected_correctness] Fuse the two sequential matmul operations (q @ k^T and att @ v) in Attention.forward with causal masking into a single custom CUDA/Triton kernel for the multi-token case (T > 1), while supporting standard masking. (tests failed (exit 1))
+  06:56:30 exp_aa82f9b760 [rejected_speed] Capture the single-token decode step (where T=1 and mask is a no-op) in a CUDA graph and replay it during the generate loop to cut kernel launch and Python overhead. (1.009x is below the noise-adjusted threshold of 1.064x (baseline noise CV 3.2%))
+  06:56:30 retrying exp_8862ee9e1b [rejected_correctness] -> exp_e8dc008ce0 (attempt 1)
+  06:56:56 exp_e8dc008ce0 [retry of exp_8862ee9e1b] [rejected_speed] Fuse the two sequential matmul operations (q @ k^T and att @ v) in Attention.forward with causal masking into a single custom CUDA/Triton kernel for the multi-token case (T > 1), while supporting standard masking. (1.034x is below the noise-adjusted threshold of 1.064x (baseline noise CV 3.2%))
+  06:56:56 iteration 2: nothing accepted
+  06:57:03 planner (openai:gpt-4.1) proposed 4 hypotheses in 6.8s
+  06:57:51 exp_2721dbbcf4 [rejected_speed] Fuse the matmul and softmax operations in Attention.forward using torch.nn.functional.scaled_dot_product_attention (SDPA) for the multi-token path (T > 1). (slower: 0.947x vs parent)
+  06:57:51 exp_2227166e05 [rejected_speed] Fuse the two sequential add+LayerNorm patterns in Block.forward (x + self.attn(self.ln1(x), cache) and x + self.mlp(self.ln2(x))) by replacing them with a custom helper function that applies LayerNorm then addition in a single call. (1.031x is below the noise-adjusted threshold of 1.064x (baseline noise CV 3.2%))
+  06:57:51 exp_353cd70372 [rejected_speed] Faster cache update in Attention.forward by removing torch.cat for the value (v) cache: update in-place using a preallocated tensor but only for the second cache (pv), as only values are read in the final att@v and may be less correctness-sensitive. (1.009x is below the noise-adjusted threshold of 1.064x (baseline noise CV 3.2%))
+  06:57:51 exp_06ffb8f602 [rejected_correctness] Use torch.baddbmm for the att = (q @ k^T) + bias computation in Attention to fuse the batch matmul and addition under the hood (for multi-token path, i.e., T > 1). (tests failed (exit 1))
+  06:57:51 retrying exp_06ffb8f602 [rejected_correctness] -> exp_37d9941db1 (attempt 1)
+  06:57:57 exp_37d9941db1 [retry of exp_06ffb8f602] [rejected_correctness] Use torch.baddbmm for the att = (q @ k^T) + bias computation in Attention to fuse the batch matmul and addition under the hood (for multi-token path, i.e., T > 1). (tests failed (exit 1))
+  06:58:03 planner (openai:gpt-4.1) proposed 4 hypotheses in 5.5s
+  06:58:56 exp_bd9617c93d [accepted] Avoid repeatedly recomputing the shape and device mask in Attention.forward multi-token path by caching the causal mask per device and sequence length (Tk) at the module level, rather than rebuilding it every time.
+  06:58:56 exp_d0121a65d9 [rejected_correctness] Fuse LayerNorm and elementwise addition into a single operation in Block.forward for the x + self.mlp(self.ln2(x)) path by introducing a helper that computes y = LayerNorm(x) + x in one go, leveraging in-place CUDA kernels if possible. (tests failed (exit 1))
+  06:58:56 exp_e219ce2241 [rejected_speed] Preallocate the cache for keys and values in Attention at model/call initialization to the max sequence length and perform in-place updates, but only for the multi-token decode path. Carefully validate the write boundaries via positional tracking. (slower: 0.946x vs parent)
+  06:58:56 exp_b09058250d [rejected_speed] Enable TF32 for all Linear and matmul ops at model init if running on CUDA and correctness tolerance is acceptable (controlled via a model.py constant flag), to accelerate attention and MLP layers in multi-token decode. (slower: 0.922x vs parent)
+  06:58:56 retrying exp_d0121a65d9 [rejected_correctness] -> exp_560d406ef4 (attempt 1)
+  06:59:04 exp_560d406ef4 [retry of exp_d0121a65d9] [rejected_correctness] Fuse LayerNorm and elementwise addition into a single operation in Block.forward for the x + self.mlp(self.ln2(x)) path by introducing a helper that computes y = LayerNorm(x) + x in one go, leveraging in-place CUDA kernels if possible. (tests failed (exit 1))
+  06:59:16 planner (openai:gpt-4.1) proposed 4 hypotheses in 6.3s
+  06:59:54 exp_a665f9c595 [rejected_speed] Preallocate a single contiguous buffer per layer for the KV (key/value) cache in Attention and index into it during decode, updating slices in-place instead of storing lists of tensors or using torch.cat. Track the current decode position to write at the correct offset each step. (1.011x is below the noise-adjusted threshold of 1.064x (baseline noise CV 3.2%))
+  06:59:54 exp_66de7073dc [rejected_correctness] Fuse LayerNorm and elementwise addition in Block.forward for x + self.attn(self.ln1(x), cache) into a single operation using a helper function that performs LayerNorm followed by addition in one fused call, leveraging efficient torch operations. (tests failed (exit 1))
+  06:59:54 exp_6821a15268 [rejected_speed] Fuse LayerNorm and elementwise addition for x + self.mlp(self.ln2(x)) in Block.forward using the same fused function as above for the second residual path. (slower: 0.988x vs parent)
+  06:59:54 exp_1b82007db3 [rejected_correctness] Replace manual attention softmax with torch.nn.functional.scaled_dot_product_attention (SDPA) only in the multi-token path (T > 1); fallback to the existing math for T==1. Carefully maintain mask compatibility and mask dtype to preserve correctness. (tests failed (exit 1))
+  06:59:54 retrying exp_66de7073dc [rejected_correctness] -> exp_010771e1ad (attempt 1)
+  06:59:54 retrying exp_1b82007db3 [rejected_correctness] -> exp_40934aa6bf (attempt 1)
+  07:00:13 exp_010771e1ad [retry of exp_66de7073dc] [rejected_speed] Fuse LayerNorm and elementwise addition in Block.forward for x + self.attn(self.ln1(x), cache) into a single operation using a helper function that performs LayerNorm followed by addition in one fused call, leveraging efficient torch operations. (slower: 0.979x vs parent)
+  07:00:13 exp_40934aa6bf [retry of exp_1b82007db3] [rejected_correctness] Replace manual attention softmax with torch.nn.functional.scaled_dot_product_attention (SDPA) only in the multi-token path (T > 1); fallback to the existing math for T==1. Carefully maintain mask compatibility and mask dtype to preserve correctness. (tests failed (exit 1))
+  07:00:20 planner (openai:gpt-4.1) proposed 4 hypotheses in 6.5s
+  07:00:58 exp_14e8ae8d76 [rejected_speed] Fuse layer normalization and the subsequent residual addition in Block.forward for both residual paths into a single, more efficient operation using torch.add (with out parameter for potential in-place efficiency). (slower: 0.925x vs parent)
+  07:00:58 exp_6746bac519 [rejected_speed] Leverage batched matrix multiplication (torch.bmm) for the QK^T and AV matmuls in multihead attention inside Attention.forward to avoid unnecessary reshapes/copies. (1.011x is below the noise-adjusted threshold of 1.064x (baseline noise CV 3.2%))
+  07:00:58 exp_09490f6860 [rejected_correctness] Cache the softmax denominator (sum) in Attention.forward when decoding a single token (T=1), as its value is always 1 (since attention is only over the current position). (tests failed (exit 1))
+  07:00:58 exp_4fffbbb419 [rejected_correctness] Skip .contiguous() in the output reshape of Attention.forward if the layout is already correct, or only call it conditionally when contiguousness is not guaranteed by the prior ops. (tests failed (exit 1))
+  07:00:58 retrying exp_09490f6860 [rejected_correctness] -> exp_e59ba58bb1 (attempt 1)
+  07:00:58 retrying exp_4fffbbb419 [rejected_correctness] -> exp_710a3a9de7 (attempt 1)
+  07:01:18 exp_e59ba58bb1 [retry of exp_09490f6860] [rejected_correctness] Cache the softmax denominator (sum) in Attention.forward when decoding a single token (T=1), as its value is always 1 (since attention is only over the current position). (tests failed (exit 1))
+  07:01:18 exp_710a3a9de7 [retry of exp_4fffbbb419] [rejected_speed] Skip .contiguous() in the output reshape of Attention.forward if the layout is already correct, or only call it conditionally when contiguousness is not guaranteed by the prior ops. (slower: 0.988x vs parent)
+  07:01:18 iteration 4: nothing accepted
+  07:01:23 planner (openai:gpt-4.1) proposed 4 hypotheses in 5.4s
+  07:02:11 exp_0844076559 [accepted] Eliminate CPU-GPU synchronization point in generation loop by avoiding .item() call for next token selection; keep next token index as a 1x1 tensor and concatenate directly on device.
+  07:02:11 exp_dccc614861 [rejected_speed] Fuse addmm for linear projections in Attention (qkv and proj) using manual torch.addmm or in-place Linear with out parameter to reduce kernel launches. (slower: 0.971x vs parent)
+  07:02:11 exp_17f7665c2e [rejected_speed] Fused residual path for Block + MLP: apply in-place addition (residual) where safe to avoid extra allocations/copies. (slower: 0.941x vs parent)
+  07:02:11 exp_6278f718d1 [rejected_correctness] Remove unnecessary calls to .contiguous() in Attention output if resulting layout is already correct; only call .contiguous() when required by downstream ops. (tests failed (exit 1))
+  07:02:11 retrying exp_6278f718d1 [rejected_correctness] -> exp_0d44e2384b (attempt 1)
+  07:02:27 exp_0d44e2384b [retry of exp_6278f718d1] [rejected_speed] Remove unnecessary calls to .contiguous() in Attention output if resulting layout is already correct; only call .contiguous() when required by downstream ops. (slower: 0.932x vs parent)
+  07:02:33 planner (openai:gpt-4.1) proposed 4 hypotheses in 5.5s
+  07:03:17 exp_300dacfb8d [rejected_correctness] Use torch.compile with mode='reduce-overhead' on the TinyGPT model for the generation loop and model forward calls. (tests failed (exit 1))
+  07:03:17 exp_e6068d2913 [rejected_speed] Eliminate redundant LayerNorm computation in Block.forward by fusing LayerNorm and the subsequent addition for the x + self.mlp(self.ln2(x)) path, using torch.add with the out parameter for efficient memory reuse. (slower: 0.995x vs parent)
+  07:03:17 exp_8c8cf9df4a [rejected_correctness] Fuse consecutive Linear projections in Attention (qkv and proj) by using torch.addmm with the out parameter and preallocated buffers to minimize temporary allocations and reduce kernel launches. (tests failed (exit 1))
+  07:03:17 exp_2613f4e1e0 [rejected_speed] Directly batch the q, k, v matmul and value matmul in Attention.forward using torch.bmm, avoiding reshape/copy patterns. (1.026x is below the noise-adjusted threshold of 1.064x (baseline noise CV 3.2%))
+  07:03:17 retrying exp_300dacfb8d [rejected_correctness] -> exp_1873e08a92 (attempt 1)
+  07:03:17 retrying exp_8c8cf9df4a [rejected_correctness] -> exp_287c9e8ab9 (attempt 1)
+  07:03:36 exp_1873e08a92 [retry of exp_300dacfb8d] [patch_failed] Use torch.compile with mode='reduce-overhead' on the TinyGPT model for the generation loop and model forward calls. (search text not found in model.py: '        logits = model(prompt, caches, start_pos=0)\n        out = prompt\n       ')
+  07:03:36 exp_287c9e8ab9 [retry of exp_8c8cf9df4a] [rejected_speed] Fuse consecutive Linear projections in Attention (qkv and proj) by using torch.addmm with the out parameter and preallocated buffers to minimize temporary allocations and reduce kernel launches. (1.021x is below the noise-adjusted threshold of 1.064x (baseline noise CV 3.2%))
+  07:03:41 new head exp_0844076559: 1.379x vs baseline
+  07:03:48 planner (openai:gpt-4.1) proposed 4 hypotheses in 7.2s
+  07:04:46 exp_54a67e230b [rejected_speed] Replace manual attention (matmul + mask + softmax + value matmul) in Attention.forward with torch.nn.functional.scaled_dot_product_attention (SDPA) for the multi-token path (T > 1), preserving current masking semantics and dtype. Single-token path remains as is to avoid risk. (slower: 0.998x vs parent)
+  07:04:46 exp_24cfc38edf [rejected_speed] Fuse the residual addition of x + self.mlp(self.ln2(x)) in Block.forward into an in-place add (where safe) by using torch.add(..., out=x) when possible, to cut memory usage and kernel launches. Only perform this fusion if input x is not required after the operation (i.e., no aliasing). (slower: 0.913x vs parent)
+  07:04:46 exp_dfe6d1788d [rejected_speed] Fuse the input embedding summation in TinyGPT.forward (self.tok(idx) + self.pos(pos)) into a single kernel by using torch.add with the out argument, to cut a temporary allocation. (slower: 0.983x vs parent)
+  07:04:46 exp_fc522bb95e [rejected_speed] Pre-pack the causal mask used in Attention.forward as a boolean type (if compatible with all attended ops) to ensure highest masking/memory efficiency on CUDA, as SDPA and some kernels are optimized for bool masks. (1.015x is below the noise-adjusted threshold of 1.064x (baseline noise CV 3.2%))
+  07:04:52 planner (openai:gpt-4.1) proposed 4 hypotheses in 6.6s
+  07:05:40 exp_35557b5f51 [rejected_correctness] Replace the manual attention computation in Attention.forward (matmul + masking + softmax + value matmul) in the multi-token case (T > 1) with torch.nn.functional.scaled_dot_product_attention (SDPA), passing the precomputed causal mask in the correct format and shape. For single-token (T==1 with cache), keep current logic to fully preserve correctness for the autoregressive step. (tests failed (exit 1))
+  07:05:40 exp_0ae3d3bf39 [rejected_speed] Leverage in-place addition for the residual in Block.forward for the x + self.attn(self.ln1(x), cache) path, using torch.add(..., out=x) only when it is guaranteed that x will not be needed after (i.e., last usage in forward) to avoid unnecessary allocations/copies. If x is not contiguous or shape/dtype do not match, fallback to regular addition. (slower: 0.996x vs parent)
+  07:05:40 exp_866b3bd868 [rejected_speed] Move causal mask to boolean dtype (mask = mask.to(torch.bool)) at construction time in Attention.__init__, and propagate this mask type throughout all usage in Attention.forward. Adjust logic in forward to handle bool mask with SDPA and manual masking, avoiding any dtype conversion during forward. Only applied if behavior and numerical results are bit-identical. (slower: 0.989x vs parent)
+  07:05:40 exp_477e629d7c [rejected_speed] Enable torch.set_float32_matmul_precision('high') at module import/init time if running on CUDA to favor TF32 matmuls for attention/MLP for all Linear and matmul ops. Only enable if precision tests confirm output remains within tolerance; make this runtime conditional and mark as medium risk since math order changes. (slower: 0.940x vs parent)
+  07:05:40 retrying exp_35557b5f51 [rejected_correctness] -> exp_54e9fdee06 (attempt 1)
+  07:05:46 exp_54e9fdee06 [retry of exp_35557b5f51] [rejected_correctness] Replace the manual attention computation in Attention.forward (matmul + masking + softmax + value matmul) in the multi-token case (T > 1) with torch.nn.functional.scaled_dot_product_attention (SDPA), passing the precomputed causal mask in the correct format and shape. For single-token (T==1 with cache), keep current logic to fully preserve correctness for the autoregressive step. (tests failed (exit 1))
+  07:05:46 iteration 6: nothing accepted
+  07:05:46 done: best 1.379x vs baseline over 57 experiments
+status=finished best_speedup=1.379x head=95a2e2cf

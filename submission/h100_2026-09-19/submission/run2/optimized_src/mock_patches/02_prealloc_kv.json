@@ -1,0 +1,16 @@
+{
+  "idea": "Preallocate the KV cache and write in place",
+  "strategy": "gpu: preallocate the KV cache to max length and write into it in place instead of torch.cat",
+  "target_file": "model.py",
+  "rationale": "torch.cat copies the entire cache every step: O(T^2) memory traffic over a generation.",
+  "risk": "medium",
+  "edits": [
+    {"file": "model.py",
+     "search": "        if cache is not None:\n            pk, pv = cache\n            if pk is not None:\n                k = torch.cat([pk, k], dim=2)   # grows the cache every step: O(T^2) copying\n                v = torch.cat([pv, v], dim=2)\n            cache[0], cache[1] = k, v\n        Tk = k.shape[2]\n",
+     "replace": "        if cache is not None:\n            buf_k, buf_v, n = cache\n            if buf_k is None:\n                buf_k = torch.empty(B, N_HEADS, MAX_SEQ, C // N_HEADS, device=x.device, dtype=k.dtype)\n                buf_v = torch.empty_like(buf_k)\n                cache[0], cache[1] = buf_k, buf_v\n            buf_k[:, :, n:n + T] = k\n            buf_v[:, :, n:n + T] = v\n            cache[2] = n + T\n            k, v = buf_k[:, :, :n + T], buf_v[:, :, :n + T]\n        Tk = k.shape[2]\n"},
+    {"file": "model.py",
+     "search": "    caches = [[None, None] for _ in model.blocks]\n",
+     "replace": "    caches = [[None, None, 0] for _ in model.blocks]\n"}
+  ],
+  "reasoning": "One allocation per layer per generation; each step writes T new rows in place and attends over a view of the first n+T rows. Attention math is unchanged so tokens and logits match."
+}

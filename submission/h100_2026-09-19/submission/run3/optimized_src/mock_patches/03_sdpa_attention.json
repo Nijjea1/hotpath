@@ -1,0 +1,13 @@
+{
+  "idea": "Fuse attention into F.scaled_dot_product_attention",
+  "strategy": "gpu: replace manual QK^T / mask / softmax / AV with one fused SDPA kernel",
+  "target_file": "model.py",
+  "rationale": "The manual attention path launches many small kernels per layer per token (matmul, scale, tril, ones, masked_fill, softmax, matmul). On a launch-bound decode this dominates. torch.nn.functional.scaled_dot_product_attention does the whole thing in one fused kernel; is_causal handles masking (and for single-token decode T==1 there is nothing to mask).",
+  "risk": "medium",
+  "edits": [{
+    "file": "model.py",
+    "search": "        att = (q @ k.transpose(-2, -1)) / math.sqrt(k.shape[-1])\n        mask = torch.tril(torch.ones(Tk, Tk, device=x.device))[Tk - T:, :]\n        att = att.masked_fill(mask == 0, float(\"-inf\"))\n        att = F.softmax(att, dim=-1)\n        y = (att @ v).transpose(1, 2).contiguous().view(B, T, C)\n        return self.proj(y)",
+    "replace": "        y = F.scaled_dot_product_attention(q, k, v, is_causal=(T > 1))\n        y = y.transpose(1, 2).contiguous().view(B, T, C)\n        return self.proj(y)"
+  }],
+  "reasoning": "SDPA reproduces scaled dot-product attention exactly (same math, PyTorch's fused implementation), so greedy tokens match and logits stay within tolerance, while collapsing ~6 kernel launches per layer into one. is_causal=(T>1) applies the causal mask on the prefill and skips it during single-token decode, where the last query legitimately attends to all cached keys."
+}

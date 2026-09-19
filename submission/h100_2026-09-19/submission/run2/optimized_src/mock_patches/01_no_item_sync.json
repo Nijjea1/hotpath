@@ -1,0 +1,13 @@
+{
+  "idea": "Remove the .item() CPU sync from the decode loop",
+  "strategy": "gpu: remove the .item() CPU sync from the decode loop; keep the next token on device",
+  "target_file": "model.py",
+  "rationale": "argmax(...).item() forces the CPU to wait for the GPU every token, serializing the whole loop.",
+  "risk": "low",
+  "edits": [{
+    "file": "model.py",
+    "search": "        nxt = int(logits[:, -1, :].argmax(dim=-1).item())     # CPU sync every token\n        nxt_t = torch.tensor([[nxt]], device=prompt.device)\n",
+    "replace": "        nxt_t = logits[:, -1, :].argmax(dim=-1, keepdim=True)\n"
+  }],
+  "reasoning": "argmax with keepdim gives the (1,1) next-token tensor directly on device. Values are identical; only the host round-trip is gone."
+}

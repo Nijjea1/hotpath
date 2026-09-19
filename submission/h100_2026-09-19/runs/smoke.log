@@ -1,0 +1,28 @@
+hotpath run run_e2031fff8a on /root/hotpath/targets/torch_transformer (planner=openai:gpt-4.1, worker=compat:moonshotai/Kimi-K2.7-Code)
+06:40:16 INFO httpx2: HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+06:40:18 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:40:18 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:40:19 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:40:19 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:40:44 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:40:45 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+06:40:45 INFO httpx2: HTTP Request: POST https://inference.baseten.co/v1/chat/completions "HTTP/1.1 200 OK"
+  06:39:29 target /root/hotpath/targets/torch_transformer
+  06:39:29 base commit 74d8af7f
+  06:40:05 baseline median 962.45250 tokens_per_s, run-to-run noise CV 2.05%
+  06:40:10 profile: 25 hotspots (torch.profiler)
+  06:40:16 planner (openai:gpt-4.1) proposed 4 hypotheses in 5.9s
+  06:40:42 exp_0628a17ebe [rejected_correctness] Replace explicit matmul+mask+softmax+matmul sequence in Attention.forward with torch.nn.functional.scaled_dot_product_attention (SDPA). (tests failed (exit 1))
+  06:40:42 exp_77377e54cf [rejected_speed] Preallocate KV-cache tensors for each Attention block and write new keys/values in place instead of torch.cat every step. (slower: 0.985x vs parent)
+  06:40:42 exp_eb9e5aeafc [rejected_correctness] Remove decode loop CPU-GPU sync by keeping next token selection on device (avoid .item() and torch.tensor()). (tests failed (exit 1))
+  06:40:42 exp_581c99ac43 [rejected_correctness] Precompute the causal mask once per model and reuse it, instead of building with torch.tril every Attention.forward call. (tests failed (exit 1))
+  06:40:42 retrying exp_0628a17ebe [rejected_correctness] -> exp_56da4e4c44 (attempt 1)
+  06:40:42 retrying exp_eb9e5aeafc [rejected_correctness] -> exp_622c3cf135 (attempt 1)
+  06:40:42 retrying exp_581c99ac43 [rejected_correctness] -> exp_3b2b6c21ab (attempt 1)
+  06:41:19 exp_56da4e4c44 [retry of exp_0628a17ebe] [accepted] Replace explicit matmul+mask+softmax+matmul sequence in Attention.forward with torch.nn.functional.scaled_dot_product_attention (SDPA).
+  06:41:19 exp_622c3cf135 [retry of exp_eb9e5aeafc] [rejected_speed] Remove decode loop CPU-GPU sync by keeping next token selection on device (avoid .item() and torch.tensor()). (slower: 0.954x vs parent)
+  06:41:19 exp_3b2b6c21ab [retry of exp_581c99ac43] [rejected_correctness] Precompute the causal mask once per model and reuse it, instead of building with torch.tril every Attention.forward call. (tests failed (exit 1))
+  06:41:24 new head exp_56da4e4c44: 1.073x vs baseline
+  06:41:24 done: best 1.073x vs baseline over 7 experiments
+status=finished best_speedup=1.073x head=63ba82f3
+smoke_exit=0

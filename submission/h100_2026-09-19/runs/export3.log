@@ -1,0 +1,6 @@
+exported PR bundle for run_1cc853d8c6 (1.468x vs baseline) to submission/run3
+  submission/run3/REPORT.md
+  submission/run3/changes.patch
+  submission/run3/optimized_src/
+To open a PR: review changes.patch, then in your repo:
+  git checkout -b hotpath/optimize && git apply "submission/run3/changes.patch" && git commit -am 'hotpath: optimizations' && gh pr create

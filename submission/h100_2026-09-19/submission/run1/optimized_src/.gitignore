@@ -1,0 +1,13 @@
+
+.hotpath/
+__pycache__/
+
+.hotpath/
+__pycache__/
+.env
+.env.*
+
+.hotpath/
+__pycache__/
+.env
+.env.*

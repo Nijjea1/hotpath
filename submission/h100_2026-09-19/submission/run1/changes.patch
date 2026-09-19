@@ -1,0 +1,28 @@
+diff --git a/model.py b/model.py
+index a7f94bd..fe39ea7 100644
+--- a/model.py
++++ b/model.py
+@@ -15,6 +15,7 @@ class Attention(nn.Module):
+         super().__init__()
+         self.qkv = nn.Linear(D_MODEL, 3 * D_MODEL, bias=False)
+         self.proj = nn.Linear(D_MODEL, D_MODEL, bias=False)
++        self.register_buffer("causal_mask", torch.tril(torch.ones(MAX_SEQ, MAX_SEQ)), persistent=False)
+ 
+     def forward(self, x, cache=None):
+         B, T, C = x.shape
+@@ -29,11 +30,12 @@ class Attention(nn.Module):
+                 v = torch.cat([pv, v], dim=2)
+             cache[0], cache[1] = k, v
+         Tk = k.shape[2]
+-        att = (q @ k.transpose(-2, -1)) / math.sqrt(k.shape[-1])
+-        mask = torch.tril(torch.ones(Tk, Tk, device=x.device))[Tk - T:, :]
+-        att = att.masked_fill(mask == 0, float("-inf"))
+-        att = F.softmax(att, dim=-1)
+-        y = (att @ v).transpose(1, 2).contiguous().view(B, T, C)
++        if T == 1 and cache is not None:
++            mask = None
++        else:
++            mask = self.causal_mask[Tk - T:Tk, :Tk].bool()
++        y = F.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
++        y = y.transpose(1, 2).reshape(B, T, C)
+         return self.proj(y)

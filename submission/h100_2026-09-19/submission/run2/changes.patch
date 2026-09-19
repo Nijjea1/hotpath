@@ -1,0 +1,39 @@
+diff --git a/model.py b/model.py
+index a7f94bd..2cf6fd8 100644
+--- a/model.py
++++ b/model.py
+@@ -15,6 +15,9 @@ class Attention(nn.Module):
+         super().__init__()
+         self.qkv = nn.Linear(D_MODEL, 3 * D_MODEL, bias=False)
+         self.proj = nn.Linear(D_MODEL, D_MODEL, bias=False)
++        # Precompute the full causal mask up to MAX_SEQ once as a persistent buffer.
++        mask = torch.tril(torch.ones(MAX_SEQ, MAX_SEQ))
++        self.register_buffer("causal_mask", mask, persistent=False)
+ 
+     def forward(self, x, cache=None):
+         B, T, C = x.shape
+@@ -30,8 +33,12 @@ class Attention(nn.Module):
+             cache[0], cache[1] = k, v
+         Tk = k.shape[2]
+         att = (q @ k.transpose(-2, -1)) / math.sqrt(k.shape[-1])
+-        mask = torch.tril(torch.ones(Tk, Tk, device=x.device))[Tk - T:, :]
+-        att = att.masked_fill(mask == 0, float("-inf"))
++        # For single-token decoding with a cache, all positions are allowed; skip masking.
++        if T == 1 and cache is not None:
++            pass
++        else:
++            mask = self.causal_mask[:Tk, :Tk][Tk - T:, :]
++            att = att.masked_fill(mask == 0, float("-inf"))
+         att = F.softmax(att, dim=-1)
+         y = (att @ v).transpose(1, 2).contiguous().view(B, T, C)
+         return self.proj(y)
+@@ -80,8 +87,7 @@ def generate(model: TinyGPT, prompt: torch.Tensor, n_new: int) -> torch.Tensor:
+     logits = model(prompt, caches, start_pos=0)
+     out = prompt
+     for _ in range(n_new):
+-        nxt = int(logits[:, -1, :].argmax(dim=-1).item())     # CPU sync every token
+-        nxt_t = torch.tensor([[nxt]], device=prompt.device)
++        nxt_t = logits[:, -1, :].argmax(dim=-1, keepdim=True)  # (B, 1), stays on device
+         out = torch.cat([out, nxt_t], dim=1)
+         logits = model(nxt_t, caches, start_pos=out.shape[1] - 1)
+     return out
