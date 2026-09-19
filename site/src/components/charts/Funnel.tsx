@@ -12,7 +12,7 @@ const H = FUNNEL.length * (ROW + GAP);
 const max = FUNNEL[0].count;
 
 // shade: grey for "still a proposal", emerald for what shipped
-const fillFor = (i: number) => (i === FUNNEL.length - 1 ? "#34d399" : `rgba(255,255,255,${0.32 - i * 0.05})`);
+const fillFor = (i: number) => (i === FUNNEL.length - 1 ? "#6fb588" : `rgba(255,255,255,${0.32 - i * 0.05})`);
 
 export default function Funnel() {
   const ref = useRef<HTMLDivElement>(null);
@@ -28,7 +28,7 @@ export default function Funnel() {
             const dropped = i > 0 ? FUNNEL[i - 1].count - s.count : 0;
             return (
               <g key={s.stage}>
-                <text x={0} y={y + ROW / 2 + 5} fontSize={15} fill="#d4d4d4" fontFamily="'Inter', sans-serif">{s.stage}</text>
+                <text x={0} y={y + ROW / 2 + 5} fontSize={15} fill="#c9c1b8" fontFamily="'Public Sans', sans-serif">{s.stage}</text>
                 <motion.rect
                   x={X0}
                   y={y}
@@ -44,14 +44,14 @@ export default function Funnel() {
                   y={y + ROW / 2 + 6}
                   fontSize={18}
                   fontWeight={600}
-                  fill={i === FUNNEL.length - 1 ? "#6ee7b7" : "#f5f5f5"}
-                  fontFamily="'Inter', sans-serif"
+                  fill={i === FUNNEL.length - 1 ? "#96cba8" : "#f4f0ec"}
+                  fontFamily="'Public Sans', sans-serif"
                   initial={{ opacity: 0 }}
                   animate={inView ? { opacity: 1 } : { opacity: 0 }}
                   transition={{ delay: 0.6 + i * 0.18, duration: 0.4 }}
                 >
                   {s.count}
-                  {dropped > 0 && <tspan fontSize={13} fontWeight={400} fill="#f87171">{`  −${dropped}`}</tspan>}
+                  {dropped > 0 && <tspan fontSize={13} fontWeight={400} fill="#d9776c">{`  −${dropped}`}</tspan>}
                 </motion.text>
               </g>
             );

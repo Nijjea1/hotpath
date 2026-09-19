@@ -34,6 +34,7 @@ import LoopDiagram from "../components/charts/LoopDiagram";
 import ThroughputChart from "../components/charts/ThroughputChart";
 import FlameGraph from "../components/charts/FlameGraph";
 import Funnel from "../components/charts/Funnel";
+import HeatField from "../components/HeatField";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -54,11 +55,11 @@ export const Route = createFileRoute("/")({
 function LogoMark({ size = 40 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden>
-      <rect width="40" height="40" rx="10" fill="#0F0D0F" stroke="rgba(255,255,255,0.12)" />
-      <path d="M7 29 H14 V22 H21 V15 H28" stroke="#34d399" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="28" cy="15" r="3.2" fill="#34d399" />
-      <path d="M21 22 L33 29" stroke="#f5f5f5" strokeWidth="1.6" strokeLinecap="round" strokeDasharray="2 2.4" />
-      <circle cx="33" cy="29" r="2" fill="#ef4444" />
+      <rect width="40" height="40" rx="10" fill="#141110" stroke="rgba(244,240,236,0.14)" />
+      <path d="M7 29 H14 V22 H21 V15 H28" stroke="#d9662f" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="28" cy="15" r="3.2" fill="#d9662f" />
+      <path d="M21 22 L33 29" stroke="#f4f0ec" strokeWidth="1.6" strokeLinecap="round" strokeDasharray="2 2.4" />
+      <circle cx="33" cy="29" r="2" fill="#c4544a" />
     </svg>
   );
 }
@@ -141,7 +142,6 @@ function HoldToScroll() {
 
 function Index() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const bgVideoRef = useRef<HTMLVideoElement>(null);
   // Reveal the hero exactly once, after fonts are ready — avoids the SSR-paint /
   // font-swap "double animation" glitch and keeps the entrance fast.
   const [show, setShow] = useState(false);
@@ -159,45 +159,18 @@ function Index() {
     return () => clearTimeout(fallback);
   }, []);
 
-  // Muted autoplay is blocked by some browsers (Safari, Chrome Energy Saver): drive
-  // playback from JS and fall back to the first user interaction.
-  useEffect(() => {
-    const v = bgVideoRef.current;
-    if (!v) return;
-    v.muted = true;
-    let removeKick = () => {};
-    const kick = () => {
-      removeKick();
-      void v.play().catch(() => {});
-    };
-    const events = ["pointerdown", "touchstart", "keydown", "wheel", "scroll"] as const;
-    void v.play().catch(() => {
-      events.forEach((e) => window.addEventListener(e, kick, { passive: true }));
-      removeKick = () => events.forEach((e) => window.removeEventListener(e, kick));
-    });
-    return () => removeKick();
-  }, []);
   return (
     <div className="relative w-full bg-black overflow-hidden">
       <HoldToScroll />
       {/* Hero */}
       <div className={`relative ${show ? "hero-ready" : ""}`}>
-        {/* full-bleed video behind the entire hero — drop the file at site/public/hotpath-bg.mp4 */}
-        <video
-          ref={bgVideoRef}
-          className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="auto"
-          src={`${import.meta.env.BASE_URL}hotpath-bg.mp4`}
-        />
+        {/* generated thermal field behind the entire hero — see components/HeatField */}
+        <HeatField className="absolute inset-0 w-full h-full z-0 pointer-events-none" />
         <div
           className="absolute inset-0 z-0 pointer-events-none"
           style={{
             background:
-              "radial-gradient(ellipse 80% 58% at 50% 24%, rgba(0,0,0,0.5), transparent 82%), linear-gradient(to bottom, rgba(0,0,0,0.45), rgba(0,0,0,0.12) 32%, rgba(0,0,0,0.5) 86%, #000)",
+              "radial-gradient(ellipse 80% 58% at 50% 24%, rgba(11,9,8,0.58), transparent 82%), linear-gradient(to bottom, rgba(11,9,8,0.5), rgba(11,9,8,0.14) 32%, rgba(11,9,8,0.55) 86%, #0b0908)",
           }}
         />
         {/* Header */}
@@ -226,7 +199,7 @@ function Index() {
               href={REPO_URL}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-2 bg-white text-black rounded-lg py-[11px] px-[18px] text-[15px] font-medium hover:bg-neutral-200 transition-colors"
+              className="inline-flex items-center gap-2 bg-accent text-[#0b0908] rounded-md py-[11px] px-[18px] text-[15px] font-medium hover:bg-accent-soft transition-colors"
             >
               <Icon path={ICONS.github} size={17} /> View on GitHub
             </a>
@@ -260,7 +233,7 @@ function Index() {
               ))}
               <Link to="/docs" className="text-3xl text-neutral-100 font-medium">Docs</Link>
             </nav>
-            <a href={REPO_URL} target="_blank" rel="noreferrer" className="mt-auto bg-white text-black rounded-lg py-4 text-center text-base font-medium">
+            <a href={REPO_URL} target="_blank" rel="noreferrer" className="mt-auto bg-accent text-[#0b0908] rounded-md py-4 text-center text-base font-medium">
               View on GitHub
             </a>
           </div>
@@ -268,65 +241,70 @@ function Index() {
 
         <div id="top" />
 
-        {/* window — translucent so the video shows through */}
-        <div className="relative z-10 mt-[10px] mx-[20px] rounded-2xl overflow-hidden anim-fade border border-white/10" style={{ backgroundColor: "rgba(11,10,12,0.5)" }}>
+        {/* window — translucent so the heat field shows through */}
+        <div className="relative z-10 mt-[10px] mx-[20px] rounded-2xl overflow-hidden anim-fade border border-white/10" style={{ backgroundColor: "rgba(11,9,8,0.5)" }}>
           <div className="relative">
-            <div className="relative overflow-hidden m-4 mb-0 border border-white/10 rounded-2xl flex flex-col items-center text-center pt-[56px] sm:pt-[72px] px-6 pb-0">
+            <div className="relative overflow-hidden m-4 mb-0 border border-white/10 rounded-2xl flex flex-col text-left pt-[56px] sm:pt-[72px] px-6 sm:px-10 pb-0">
               <div className="absolute inset-0 bg-grid z-0 opacity-25" />
-              <div className="absolute inset-0 z-0 pointer-events-none" style={{ background: "radial-gradient(ellipse 85% 75% at 50% 32%, rgba(0,0,0,0.72), transparent 74%)" }} />
+              {/* quiet ground under the copy, which now sits on the left */}
+              <div className="absolute inset-0 z-0 pointer-events-none" style={{ background: "radial-gradient(ellipse 80% 78% at 26% 34%, rgba(11,9,8,0.8), transparent 72%)" }} />
 
-              <motion.div
-                className="relative z-10 inline-flex items-center gap-2 mb-6"
-                initial={{ opacity: 0, y: 10 }}
-                animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-                transition={{ duration: 0.5, delay: 0.05, ease: "easeOut" }}
-              >
-                <span className="text-xs font-semibold uppercase tracking-[0.25em] text-neutral-400 bg-white/5 border border-white/10 rounded-full px-4 py-1.5">
-                  Performance agent · Hack the North 2026
-                </span>
-              </motion.div>
+              <div className="relative z-10 w-full max-w-[1124px] mx-auto grid grid-cols-1 lg:grid-cols-12">
+                <div className="lg:col-span-9 flex flex-col items-start">
+                  <motion.div
+                    className="eyebrow-rule mb-7"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
+                    transition={{ duration: 0.5, delay: 0.05, ease: "easeOut" }}
+                  >
+                    <span className="font-instrument text-[10px] sm:text-[11px] font-medium uppercase tracking-[0.16em] text-neutral-400">
+                      Performance agent · Hack the North 2026
+                    </span>
+                  </motion.div>
 
-              <WordsReveal
-                as="h1"
-                className="relative z-10 text-[36px] leading-[42px] sm:text-7xl sm:leading-[78px] font-semibold text-neutral-100 max-w-5xl tracking-tight mb-[16px] sm:mb-[20px] block"
-                text="AI can write optimizations."
-                active={show}
-                step={0.05}
-                duration={0.7}
-                delay={0.18}
-              />
-              <WordsReveal
-                as="p"
-                className="relative z-10 text-2xl sm:text-4xl font-medium italic text-red-400 mb-[24px] sm:mb-[28px] block"
-                text="It can't tell you if they work."
-                active={show}
-                step={0.07}
-                duration={0.6}
-                delay={0.6}
-              />
-              <WordsReveal
-                as="p"
-                className="relative z-10 text-base sm:text-xl opacity-70 text-neutral-100 w-[680px] max-w-full leading-snug mb-[24px] sm:mb-[30px] block"
-                text="Hotpath is an AI agent that makes your code faster and proves every change is correct. It profiles, proposes, tests and benchmarks — and keeps only the changes that are both correct and measurably faster."
-                active={show}
-                step={0.018}
-                duration={0.6}
-                delay={0.8}
-              />
+                  <WordsReveal
+                    as="h1"
+                    className="text-[40px] leading-[44px] sm:text-[58px] sm:leading-[62px] lg:text-[84px] lg:leading-[86px] font-semibold text-neutral-100 max-w-[900px] mb-[14px] sm:mb-[18px] block"
+                    text="AI can write optimizations."
+                    active={show}
+                    step={0.05}
+                    duration={0.7}
+                    delay={0.18}
+                  />
+                  <WordsReveal
+                    as="p"
+                    className="font-display text-[22px] sm:text-[28px] lg:text-[32px] font-medium text-accent mb-[22px] sm:mb-[26px] block"
+                    text="It can't tell you if they work."
+                    active={show}
+                    step={0.07}
+                    duration={0.6}
+                    delay={0.6}
+                  />
+                  <WordsReveal
+                    as="p"
+                    className="text-[15px] sm:text-[17px] lg:text-[18px] opacity-60 text-neutral-100 max-w-[52ch] leading-relaxed mb-[26px] sm:mb-[32px] block"
+                    text="Hotpath is an AI agent that makes your code faster and proves every change is correct. It profiles, proposes, tests and benchmarks — and keeps only the changes that are both correct and measurably faster."
+                    active={show}
+                    step={0.018}
+                    duration={0.6}
+                    delay={0.8}
+                  />
 
-              {/* command bar */}
-              <motion.div
-                className="relative z-10 w-[572px] max-w-full h-12 mb-[25px]"
-                initial={{ opacity: 0, y: 12 }}
-                animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
-                transition={{ duration: 0.55, delay: 0.95, ease: "easeOut" }}
-              >
-                <div className="absolute inset-0 bg-neutral-900/80 outline outline-[1.30px] outline-white/10 rounded-xl flex items-center pl-4 pr-1.5 gap-3">
-                  <span className="text-neutral-400 shrink-0"><Icon path={ICONS.terminal} size={18} /></span>
-                  <CommandBar text="hotpath run configs/demo_repo.yaml" startDelay={1100} speed={38} />
-                  <CopyButton value="hotpath run configs/demo_repo.yaml" />
+                  {/* command bar */}
+                  <motion.div
+                    className="relative w-[572px] max-w-full h-12 mb-[34px]"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
+                    transition={{ duration: 0.55, delay: 0.95, ease: "easeOut" }}
+                  >
+                    <div className="absolute inset-0 bg-neutral-900/80 outline outline-[1.30px] outline-white/10 rounded-md flex items-center pl-4 pr-1.5 gap-3">
+                      <span className="text-accent-soft shrink-0"><Icon path={ICONS.terminal} size={18} /></span>
+                      <CommandBar text="hotpath run configs/demo_repo.yaml" startDelay={1100} speed={38} />
+                      <CopyButton value="hotpath run configs/demo_repo.yaml" />
+                    </div>
+                  </motion.div>
                 </div>
-              </motion.div>
+              </div>
 
               <HeroDashboard show={show} />
             </div>
@@ -462,10 +440,10 @@ function GiantWordmark() {
           textAnchor="middle"
           textLength={984}
           lengthAdjust="spacingAndGlyphs"
-          fontFamily="'Inter Tight', 'Inter', sans-serif"
+          fontFamily="'Archivo', 'Public Sans', sans-serif"
           fontWeight={700}
           fontSize={170}
-          fill="#34d399"
+          fill="#d9662f"
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
@@ -557,7 +535,7 @@ function HeroDashboard({ show }: { show: boolean }) {
 
         {/* best verified count-up */}
         <motion.div
-          className="w-full sm:w-[180px] lg:w-[180px] h-[140px] sm:h-[140px] rounded-2xl bg-[#D0C9B9] p-4 flex flex-col justify-between text-[#131113]"
+          className="w-full sm:w-[180px] lg:w-[180px] h-[140px] sm:h-[140px] rounded-2xl bg-[#D0C9B9] p-4 flex flex-col justify-between text-[#171312]"
           initial={{ opacity: 0, y: 20 }}
           animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
           transition={{ duration: 0.36, delay: 0.34, ease: "easeOut" }}
@@ -644,7 +622,7 @@ function PatchScan({ active }: { active: boolean }) {
       {active && phase >= 1 && phase <= 3 && (
         <motion.div
           key={phase}
-          className="absolute top-0 bottom-0 w-px bg-blue-400/80 shadow-[0_0_12px_2px_rgba(59,130,246,0.6)]"
+          className="absolute top-0 bottom-0 w-px bg-blue-400/80 shadow-[0_0_12px_2px_rgba(217,102,47,0.65)]"
           initial={{ left: "0%" }}
           animate={{ left: "100%" }}
           transition={{ duration: 0.7, ease: "linear" }}
@@ -735,7 +713,7 @@ function ThesisCards() {
       <motion.div
         {...cardAnim(0.1)}
         className="relative h-[520px] rounded-3xl overflow-hidden bg-neutral-950 border border-white/5 flex flex-col pt-12 px-7"
-        style={{ backgroundImage: "radial-gradient(ellipse at 50% -10%, rgba(239,68,68,0.10), transparent 60%)" }}
+        style={{ backgroundImage: "radial-gradient(ellipse at 50% -10%, rgba(196,84,74,0.12), transparent 60%)" }}
       >
         <span className="text-xs font-semibold uppercase tracking-[0.18em] text-red-400/80">{THESIS_CARDS[0].eyebrow}</span>
         <WordsReveal as="h3" className="mt-4 text-4xl text-neutral-100 leading-tight" text={THESIS_CARDS[0].title} delay={0.2} />
@@ -750,7 +728,7 @@ function ThesisCards() {
       <motion.div
         {...cardAnim(0.3)}
         className="relative h-[520px] rounded-3xl overflow-hidden bg-neutral-900 border border-white/5 flex flex-col pt-12 px-7"
-        style={{ backgroundImage: "radial-gradient(ellipse at 50% -10%, rgba(124,90,23,0.18), transparent 60%)" }}
+        style={{ backgroundImage: "radial-gradient(ellipse at 50% -10%, rgba(224,179,65,0.10), transparent 60%)" }}
       >
         <span className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-400/80">{THESIS_CARDS[1].eyebrow}</span>
         <WordsReveal as="h3" className="mt-4 text-4xl text-neutral-100 leading-tight" text={THESIS_CARDS[1].title} delay={0.4} />
@@ -765,7 +743,7 @@ function ThesisCards() {
       <motion.div {...cardAnim(0.5)} className="relative h-[520px] rounded-3xl overflow-hidden bg-[#D0C9B9] flex flex-col">
         <div className="p-7 pb-0">
           <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-800/80">The Hotpath rule</span>
-          <WordsReveal as="h3" className="mt-3 text-[30px] leading-tight text-neutral-900 font-normal [font-family:'Inter_Tight',sans-serif]" text="Correct and faster than the noise. Nothing else ships." delay={0.6} step={0.06} />
+          <WordsReveal as="h3" className="mt-3 text-[30px] leading-tight text-neutral-900 font-normal [font-family:'Archivo',sans-serif]" text="Correct and faster than the noise. Nothing else ships." delay={0.6} step={0.06} />
         </div>
         <MeasuredCardChart />
         <div className="absolute bottom-0 left-0 w-full h-[78px] flex items-end pb-5 px-7 gap-2">
@@ -858,13 +836,13 @@ function MechanismSection() {
           </div>
 
           {/* harness code window */}
-          <motion.div className="rounded-3xl border border-white/10 overflow-hidden flex flex-col" style={{ backgroundColor: "#0F0D0F" }} initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-100px" }} transition={{ duration: 0.7, delay: 0.2, ease: "easeOut" }}>
+          <motion.div className="rounded-3xl border border-white/10 overflow-hidden flex flex-col" style={{ backgroundColor: "#141110" }} initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-100px" }} transition={{ duration: 0.7, delay: 0.2, ease: "easeOut" }}>
             <div className="flex items-center px-5 py-4">
               <span className="text-xs font-mono text-neutral-500">hotpath/harness.py · simplified</span>
             </div>
             <div className="mx-[20px] mb-[20px] relative rounded-2xl overflow-hidden border border-white/10">
               <div className="absolute inset-0 bg-grid opacity-40" />
-              <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 70% 0%, rgba(59,130,246,0.10), transparent 60%)" }} />
+              <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 70% 0%, rgba(217,102,47,0.10), transparent 60%)" }} />
               <div className="relative p-6">
                 <Typewriter
                   className="text-[13px] sm:text-sm opacity-80 text-neutral-200 leading-relaxed whitespace-pre-wrap font-mono"
@@ -949,7 +927,7 @@ function VerdictPillCard({ exp }: { exp: Experiment }) {
     : `${STATUS_LABEL[exp.status]} · ${exp.short}`;
   return (
     <div
-      className={`h-20 w-full grow flex items-center gap-4 px-7 rounded-2xl cursor-default hover:scale-[1.02] transition-transform min-w-0 border ${good ? "bg-emerald-500/10 border-emerald-500/30" : "bg-[#131113] border-white/10"}`}
+      className={`h-20 w-full grow flex items-center gap-4 px-7 rounded-2xl cursor-default hover:scale-[1.02] transition-transform min-w-0 border ${good ? "bg-emerald-500/10 border-emerald-500/30" : "bg-[#171312] border-white/10"}`}
     >
       <div className={`size-9 rounded-lg flex items-center justify-center shrink-0 ${good ? "bg-emerald-500/20 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>
         <Icon path={good ? ICONS.check : ICONS.shield} size={18} />
@@ -1034,7 +1012,7 @@ function ExperimentReplay() {
   const cur = trace[active];
   const good = cur.status === "accepted";
   return (
-    <div ref={ref} className="rounded-3xl border border-white/10 overflow-hidden flex flex-col" style={{ backgroundColor: "#0F0D0F" }}>
+    <div ref={ref} className="rounded-3xl border border-white/10 overflow-hidden flex flex-col" style={{ backgroundColor: "#141110" }}>
       <div className="flex justify-between items-center px-5 py-4">
         <span className="hidden sm:inline text-xs font-mono text-neutral-500">.hotpath/hotpath.db · {cur.id}</span>
         <button onClick={() => setPlaying((p) => !p)} className="text-xs font-medium text-neutral-400 hover:text-neutral-100 transition-colors bg-white/5 rounded-md px-2.5 py-1">
@@ -1170,7 +1148,7 @@ function ResultsSection() {
         </ChartPanel>
       </div>
       <motion.div
-        className="rounded-3xl border border-white/10 bg-[#0F0D0F] p-8 flex flex-col justify-center gap-5 mt-6"
+        className="rounded-3xl border border-white/10 bg-[#141110] p-8 flex flex-col justify-center gap-5 mt-6"
         initial={{ opacity: 0, y: 40 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-80px" }}
@@ -1226,14 +1204,14 @@ function QuickstartSection() {
             </motion.div>
           </div>
 
-          <motion.div className="rounded-3xl border border-white/10 overflow-hidden flex flex-col" style={{ backgroundColor: "#0F0D0F" }} initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-100px" }} transition={{ duration: 0.7, delay: 0.2, ease: "easeOut" }}>
+          <motion.div className="rounded-3xl border border-white/10 overflow-hidden flex flex-col" style={{ backgroundColor: "#141110" }} initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-100px" }} transition={{ duration: 0.7, delay: 0.2, ease: "easeOut" }}>
             <div className="flex items-center justify-between px-5 py-4">
               <span className="text-xs font-mono text-neutral-500">configs/dryft_h100.yaml</span>
               <CopyButton value={CONFIG_YAML} />
             </div>
             <div className="mx-[20px] mb-[20px] relative rounded-2xl overflow-hidden border border-white/10">
               <div className="absolute inset-0 bg-grid opacity-40" />
-              <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 70% 0%, rgba(52,211,153,0.10), transparent 60%)" }} />
+              <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 70% 0%, rgba(217,102,47,0.10), transparent 60%)" }} />
               <div className="relative p-6">
                 <Typewriter className="text-[13px] sm:text-sm opacity-80 text-neutral-200 leading-relaxed whitespace-pre-wrap font-mono" delay={0.4} speed={9} text={CONFIG_YAML} />
               </div>
@@ -1280,7 +1258,7 @@ function CommandBar({ text, startDelay = 0, speed = 60 }: { text: string; startD
     return () => { cancelled = true; clearTimeout(start); if (timer) clearTimeout(timer); };
   }, [text, startDelay, speed]);
   return (
-    <span className="flex-1 min-w-0 text-sm font-mono text-neutral-100 truncate text-left">
+    <span className="flex-1 min-w-0 text-[13px] font-instrument text-neutral-100 truncate text-left">
       <span className="text-neutral-500">$ </span>
       {shown}
       <span className="inline-block w-[7px] h-[15px] -mb-0.5 bg-neutral-300 caret-blink ml-0.5" />
@@ -1297,7 +1275,7 @@ function CopyButton({ value }: { value: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 1400);
       }}
-      className="shrink-0 inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-neutral-100 text-sm font-medium rounded-lg h-9 px-3 transition-colors"
+      className="shrink-0 inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-neutral-100 text-sm font-medium rounded-[5px] h-9 px-3 transition-colors"
     >
       <Icon path={copied ? ICONS.check : ICONS.copy} size={15} /> {copied ? "Copied" : "Copy"}
     </button>
@@ -1428,7 +1406,7 @@ function StatTile({ value, label, color = "text-neutral-100", delay = 0 }: { val
 function ChartPanel({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <motion.div
-      className={`rounded-3xl border border-white/10 bg-[#0F0D0F] p-5 sm:p-8 ${className ?? ""}`}
+      className={`rounded-3xl border border-white/10 bg-[#141110] p-5 sm:p-8 ${className ?? ""}`}
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-80px" }}

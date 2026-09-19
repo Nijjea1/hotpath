@@ -11,10 +11,10 @@ const X0 = 0;
 const X1 = 520;
 
 const TONE: Record<Frame["tone"], { fill: string; text: string }> = {
-  hot: { fill: "#ef4444", text: "#fff5f5" },
-  warm: { fill: "#f59e0b", text: "#1c1204" },
-  cool: { fill: "#3f3f46", text: "#e5e5e5" },
-  gone: { fill: "transparent", text: "#737373" },
+  hot: { fill: "#c4544a", text: "#fbf0ec" },
+  warm: { fill: "#e0b341", text: "#191307" },
+  cool: { fill: "#3a3330", text: "#e4ded7" },
+  gone: { fill: "transparent", text: "#6e665f" },
 };
 
 type Placed = { f: Frame; x: number; w: number; depth: number };

@@ -2,36 +2,108 @@
 @source "../src";
 @import "tw-animate-css";
 
+/* ------------------------------------------------------------------ tokens
+   Type: Archivo (display) · Public Sans (body) · IBM Plex Mono (code) ·
+   Martian Mono (command bar, verdict labels — the "instrument" voice).
+
+   Colour: a warm ink ground with a copper accent. The semantic slots the
+   harness needs are kept distinct on purpose:
+     copper  — brand / the active harness gate (remaps blue-*)
+     sage    — accepted, verified (remaps emerald-*)
+     signal  — rejected on correctness (remaps red-*)
+     gold    — within measurement noise (remaps amber-*)
+   Remapping the scales rather than rewriting every class keeps the verdict
+   semantics in one place. */
+@theme {
+  --font-sans: "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Archivo", "Public Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-instrument: "Martian Mono", "IBM Plex Mono", ui-monospace, monospace;
+
+  /* ground — warm ink, not pure black */
+  --color-black: #0b0908;
+  --color-surface: #141110;
+  --color-surface-2: #171312;
+
+  /* accent — copper. also the harness "gate" colour (was blue-500) */
+  --color-accent: #d9662f;
+  --color-accent-soft: #e8845a;
+  --color-blue-300: #f0a585;
+  --color-blue-400: #e8845a;
+  --color-blue-500: #d9662f;
+
+  /* accepted / verified — sage, deliberately not the stock emerald */
+  --color-emerald-200: #cde7d4;
+  --color-emerald-300: #96cba8;
+  --color-emerald-400: #6fb588;
+  --color-emerald-500: #4e9a6c;
+  --color-emerald-700: #2f6b4a;
+  --color-emerald-800: #255b3e;
+
+  /* rejected on correctness — desaturated so it stops fighting the copper */
+  --color-red-300: #e8a19a;
+  --color-red-400: #d9776c;
+  --color-red-500: #c4544a;
+  --color-red-600: #a8443c;
+
+  /* within noise */
+  --color-amber-400: #e0b341;
+
+  /* greys warmed to sit on the ink ground */
+  --color-neutral-100: #f4f0ec;
+  --color-neutral-200: #e4ded7;
+  --color-neutral-300: #c9c1b8;
+  --color-neutral-400: #9c938a;
+  --color-neutral-500: #78706a;
+  --color-neutral-600: #585049;
+  --color-neutral-900: #1a1615;
+  --color-neutral-950: #110e0d;
+}
+
 @theme inline {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 }
 
 :root {
-  --background: #000000;
-  --foreground: #f5f5f5;
+  --background: #0b0908;
+  --foreground: #f4f0ec;
 }
 
 @layer base {
   html, body {
-    background-color: #000000;
-    color: #f5f5f5;
+    background-color: #0b0908;
+    color: #f4f0ec;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
-  /* headings in the display grotesque (Inter Tight, tight tracking) */
+  /* headings in the display grotesque (Archivo, tight tracking) */
   h1, h2, h3, h4 {
     font-family: var(--font-display);
     font-weight: 600;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.022em;
   }
+  h1 { letter-spacing: -0.032em; }
   .font-display { font-family: var(--font-display); }
   /* numerals in the display grotesque with tabular figures */
   .tabular-nums { font-family: var(--font-display); font-feature-settings: "tnum" 1; }
+  /* the instrument voice: command bar, eyebrows, verdict labels */
+  .font-instrument { font-family: var(--font-instrument); }
+}
+
+/* an eyebrow drawn as a measurement tick + rule, not a glass pill */
+.eyebrow-rule {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.eyebrow-rule::before {
+  content: "";
+  width: 1.75rem;
+  height: 1px;
+  background: var(--color-accent);
+  flex: none;
 }
 
 @keyframes rise-up {
@@ -63,8 +135,8 @@
 /* faint engineering grid for dark panels */
 .bg-grid {
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    linear-gradient(to right, rgba(255, 245, 235, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 245, 235, 0.045) 1px, transparent 1px);
   background-size: 32px 32px;
 }
 

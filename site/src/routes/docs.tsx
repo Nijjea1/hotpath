@@ -2,7 +2,7 @@ import type * as React from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { COMMANDS, CONFIG_YAML, LOOP, README_URL, REPO_URL, DEMO_URL, BENCHMARK_URL } from "../data/hotpath";
 
-const ACCENT = "#34d399";
+const ACCENT = "#d9662f";
 const ISOLATION_URL = `${REPO_URL}/blob/main/docs/ISOLATION.md`;
 
 export const Route = createFileRoute("/docs")({
@@ -24,11 +24,11 @@ export const Route = createFileRoute("/docs")({
 function LogoMark({ size = 40 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden>
-      <rect width="40" height="40" rx="10" fill="#0F0D0F" stroke="rgba(255,255,255,0.12)" />
-      <path d="M7 29 H14 V22 H21 V15 H28" stroke="#34d399" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="28" cy="15" r="3.2" fill="#34d399" />
+      <rect width="40" height="40" rx="10" fill="#141110" stroke="rgba(244,240,236,0.14)" />
+      <path d="M7 29 H14 V22 H21 V15 H28" stroke="#d9662f" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="28" cy="15" r="3.2" fill="#d9662f" />
       <path d="M21 22 L33 29" stroke="#f5f5f5" strokeWidth="1.6" strokeLinecap="round" strokeDasharray="2 2.4" />
-      <circle cx="33" cy="29" r="2" fill="#ef4444" />
+      <circle cx="33" cy="29" r="2" fill="#c4544a" />
     </svg>
   );
 }
@@ -164,7 +164,7 @@ hotpath ablate configs/demo_repo.yaml`}</Code>
           </p>
           <div className="space-y-4">
             {LOOP.map((l) => (
-              <div key={l.id} className="rounded-2xl border border-white/10 bg-[#0F0D0F] p-5">
+              <div key={l.id} className="rounded-2xl border border-white/10 bg-[#141110] p-5">
                 <div className="flex items-baseline gap-3">
                   <span className="font-mono text-[15px] font-semibold" style={{ color: ACCENT }}>
                     {l.n}
@@ -221,7 +221,7 @@ hotpath ablate configs/demo_repo.yaml`}</Code>
         <Section id="cli" eyebrow="Reference" title="CLI reference">
           <div className="space-y-4">
             {COMMANDS.map(([cmd, desc]) => (
-              <div key={cmd} className="rounded-xl border border-white/10 bg-[#0F0D0F] p-4">
+              <div key={cmd} className="rounded-xl border border-white/10 bg-[#141110] p-4">
                 <div className="font-mono text-[14px] text-neutral-100">{cmd}</div>
                 <div className="mt-1.5 text-neutral-400 text-[14px] leading-relaxed">{desc}</div>
               </div>
