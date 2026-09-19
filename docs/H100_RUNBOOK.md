@@ -3,13 +3,28 @@
 Everything here is prepared so tomorrow is execution, not building. Order matters: **correctness
 and a clean baseline first, then the search, then the story.**
 
+## Evidence boundary before you start
+
+`submission/h100_2026-09-19/` preserves three recorded searches against the bundled TinyGPT
+stand-in: 1.460x, 1.379x, and 1.468x aggregate tokens/sec. Its README identifies an H100
+workstation, but the artifact does not retain an independently verifiable host/driver/environment
+record. It is useful as a dashboard rehearsal and experiment-history example; it is not evidence
+for Dryft's actual model.
+
+The current benchmark runs a fixed workload matrix every trial: p32_b1, p32_b2, p160_b1, and
+p160_b2, respectively `(prompt length, batch size, generated tokens)` of `(32,1,128)`,
+`(32,2,128)`, `(160,1,128)`, and `(160,2,128)`. The headline is total generated tokens divided
+by total synchronized elapsed time. A candidate needs the aggregate threshold and bootstrap-CI
+result, plus at least 98% of its parent's median tokens/sec on every required shape.
+
 ## 0. Environment (once, at the start)
 ```bash
-pip install -e ".[dev]"          # Linux/H100: torch with CUDA + Triton available
+pip install -e ".[dev]"          # install Hotpath; install a CUDA-compatible PyTorch build separately
 export OPENAI_API_KEY=...        # planner
 export BASETEN_API_KEY=...       # workers
-export SENTRY_DSN=...            # observability track (already in .env here)
+export SENTRY_DSN=...            # optional observability track
 python -c "import torch; print(torch.cuda.get_device_name(0))"   # expect H100
+python -c "import torch; print(torch.version.cuda, torch.__version__)"
 CFG=configs/dryft_local.yaml     # or configs/dryft_h100.yaml; every command below uses $CFG
 ```
 **Pick one execution mode.** Both configs run the identical search (a test enforces that they differ
@@ -76,6 +91,9 @@ hotpath ablate $CFG                 # what each accepted change actually contrib
 hotpath export $CFG submission/ --ablate   # optimized tree + changes.patch + REPORT.md
 ```
 `REPORT.md` is your headline: final tokens/sec speedup, the accepted chain, and the ablation table.
+Also save `nvidia-smi`, the target commit, driver, CUDA/PyTorch versions, config snapshot, and the
+aggregate plus each workload's samples. Without those, a result remains a recorded artifact rather
+than a hardware-attested Dryft measurement.
 
 ## 5. Take the results to the judging table (offline)
 The dashboard answers only loopback clients and can start runs, so never expose it on venue Wi-Fi.

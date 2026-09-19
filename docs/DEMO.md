@@ -29,6 +29,15 @@ The mock provider supplies recorded candidate patches. Tests and benchmarks stil
 through the real harness, so this verifies orchestration and verdict handling without
 API keys. `configs/demo_repo_beam.yaml` also exercises beam branches and retry feedback.
 
+### Second live-demo safety target
+
+`configs/slow_web_analytics.yaml` provides an independent, deliberately inefficient web-analytics
+target. Its ten-run reliability check consistently shipped only the one-pass aggregation change,
+recorded one locked-file rejection and one correctness rejection, and cleaned every worktree.
+The latest local gate ran in 5.7–9.1 seconds per attempt, with 72.8–137.8x measured improvement. The variance is from its
+baseline noise; the shipped set and verdict classes were stable. Its ignored runtime evidence is
+`reports/slow_web_analytics_reliability.json`.
+
 ### Three-beat presentation
 
 1. **Measure:** show the baseline metric and widest hotspot in the before view.
@@ -59,10 +68,18 @@ file fails explicitly so an incomplete excerpt cannot silently produce an invali
 
 ## GPU target on a dedicated Linux host
 
-`targets/torch_transformer` is a small Dryft-shaped target and is useful for exercising
-tokens/sec measurements. It is not a validation of the real Dryft model. Run GPU work
-on a dedicated Linux host with an H100, a private Docker daemon, and an operator-reviewed
-CUDA/PyTorch image. Configure one GPU and one benchmark at a time:
+`targets/torch_transformer` is a small TinyGPT stand-in useful for exercising tokens/sec
+measurements. It is not a validation of the real Dryft model. The recorded artifacts in
+`submission/h100_2026-09-19/` contain three TinyGPT runs at 1.460x, 1.379x, and 1.468x;
+the artifact README identifies an H100 workstation, but the repository has no independent
+host/driver/environment capture for those runs. Use them as a stored dashboard story, not
+as a Dryft result.
+
+The current GPU configs declare a fixed four-shape matrix: p32_b1, p32_b2, p160_b1, and
+p160_b2. Each headline sample is total generated tokens divided by total synchronized elapsed
+time across that complete matrix. A candidate must pass the aggregate statistical gate and
+retain at least 98% of its parent's median throughput on every required shape. Run fresh GPU
+work on a dedicated Linux host with an operator-reviewed CUDA/PyTorch image:
 
 `configs/dryft_h100.yaml` is the competition config, and `docs/H100_RUNBOOK.md` is the
 step-by-step playbook. Its `hotpath-runner:h100-reviewed` image name is an operator-supplied
@@ -79,12 +96,13 @@ benchmark:
   exclusive: true
 ```
 
-The repository does not claim a Dryft or H100 result. Establish those results only by
-running the target with the intended model, image, driver, and reference tests, then
-recording the measured evidence.
+Establish a Dryft result only by running Dryft's intended model with its official reference
+tests, then recording the target commit, GPU identity, driver, CUDA/PyTorch versions, config,
+aggregate samples, and per-shape samples beside the export.
 
 ## What is validated
 
 The automated suite validates configuration, harness isolation contracts, persistence,
-provider behavior, benchmark decisions, and the dashboard. It does not validate a
-Baseten worker endpoint, a real Dryft model swap, or performance on a particular GPU.
+provider behavior, benchmark decisions, and the dashboard. The Baseten handoff records a
+historical CPU endpoint exercise; the suite does not revalidate that endpoint, a real Dryft
+model swap, or a particular GPU environment.

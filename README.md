@@ -65,6 +65,12 @@ retry-with-feedback loop recovering a failed patch, and the bootstrap CI rejecti
 *looks* ~4% faster but is statistically indistinguishable from noise. The ablation table shows what
 each kept change contributed.
 
+`configs/slow_web_analytics.yaml` is a second offline live-demo target. Its ten-run reliability
+check always shipped only the one-pass request-total aggregation, kept the same accepted, locked,
+and correctness-rejection verdicts, and left no worktrees behind. The latest local gate took 5.7–9.1 seconds per run and
+measured 72.8–137.8x speedup; the spread reflects variable baseline noise, not a
+post-hoc choice of run. The ignored runtime evidence is `reports/slow_web_analytics_reliability.json`.
+
 ## With real models
 
 ```bash
@@ -223,17 +229,25 @@ models and the tests/ fixtures stand in for a target.
 ## What is real and what is not
 
 The repeatable evidence in this repository is the offline mock loop and automated tests.
-Live OpenAI calls require an operator key. No Baseten endpoint, real Dryft model swap,
-H100 run, or particular GPU performance result is claimed here. Use a dedicated Linux
-GPU host and the Docker boundary for hostile GPU targets; see [`docs/DEMO.md`](docs/DEMO.md)
-and [`docs/ISOLATION.md`](docs/ISOLATION.md).
+Live OpenAI calls require an operator key. A recorded GPU artifact is included under
+`submission/h100_2026-09-19/`; it measures the bundled TinyGPT stand-in, not Dryft's
+model. Its three reports record 1.460x, 1.379x, and 1.468x aggregate tokens/sec speedups.
+The artifact's own README identifies its workstation as an H100, but these checked-in files
+do not independently attest the host, driver, or environment. Treat the numbers as recorded
+TinyGPT evidence until a new run captures that machine record and Dryft's official target.
+The Baseten handoff also records a CPU `demo_repo` run using its worker endpoint; it is not
+a current GPU worker-quality validation. See [`docs/DEMO.md`](docs/DEMO.md),
+[`docs/H100_RUNBOOK.md`](docs/H100_RUNBOOK.md), and [`docs/ISOLATION.md`](docs/ISOLATION.md).
 
 - Every number in the dashboard is read from SQLite rows written by the harness. There are no
   placeholder values or hardcoded success states.
 - The offline demo's *candidate patches* are recorded; their *verdicts* are measured live.
-- `targets/torch_transformer` has historical local GPU audit results. The current Docker
-  runner and H100 template have not been validated on an H100; run their tests and
-  benchmark there before reporting a GPU speedup.
+- `targets/torch_transformer` is a development target with recorded TinyGPT runs. It declares
+  four required workloads: prompt lengths 32 and 160 at batch sizes 1 and 2. Every trial's
+  headline is total generated tokens divided by the synchronized elapsed time across all four.
+  A candidate must clear the aggregate evidence gate and retain at least 98% of its parent's
+  median throughput on every shape. The real Dryft model, its official correctness test, and
+  a hardware-attested rerun remain required for a Dryft claim.
 - The OpenAI provider uses the `beta.chat.completions.parse` structured-output API.
   Historical live calls are documented in `AUDIT.md`; the current worker changes need
   a fresh live check with an operator key.
@@ -296,10 +310,11 @@ and [`docs/ISOLATION.md`](docs/ISOLATION.md).
 
 ## Roadmap still open
 
-- Ablation-driven pruning of the beam at the end of a run.
-- True call-stack flame graphs. The bottleneck diff is a flat per-function view because that is all
-  the profile stores: `profilelib.run` discards the `pstats` caller map and `torch_run` emits no
-  stacks, so emitting caller edges is the prerequisite.
+- Automatic ablation-driven pruning at the end of a run. Verified joint pruning is already
+  available on request with `hotpath ablate --prune` or `hotpath export --prune`.
+- Device-time call-stack attribution. Torch CPU event trees have a genuine flame graph; CUDA
+  device-time and cProfile runs show a flat hotspot comparison because those collectors do not
+  provide a reliable nested time hierarchy for that metric.
 - Persist a profile per accepted experiment. `orchestrator` already profiles surviving beam nodes
   and discards the result, so any node could be diffed against baseline or its own parent for free.
 - `hotpath export` opening the PR directly via `gh` when a remote is configured.

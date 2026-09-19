@@ -1,7 +1,8 @@
 # Baseten / H100 handoff — continue from here
 
-Handoff brief for a teammate (or their AI assistant) to finish the Baseten + H100 work that is
-wired but **not yet run on a real H100**. Repo: https://github.com/Nijjea1/hotpath (branch `main`).
+Handoff brief for a teammate (or their AI assistant). Repo: https://github.com/Nijjea1/hotpath
+(branch `main`). The repository contains recorded H100-labelled TinyGPT artifacts, but still needs
+a hardware-attested run against Dryft's actual model.
 
 ## The goal
 Hotpath is an agent that optimizes code and **proves** each change is correct + faster. For the
@@ -9,23 +10,29 @@ Dryft track we run its `torch_transformer` target (a decode-throughput transform
 and report **tokens/sec** before vs. after. Baseten provides both the worker LLM (Model API) and
 the H100 (Training workstation).
 
-## What is DONE and pushed (validated locally)
+## What is recorded
 - **Baseten worker wired.** Planner = OpenAI `gpt-4.1`; worker = Baseten `moonshotai/Kimi-K2.7-Code`
   via `https://inference.baseten.co/v1` (OpenAI-compatible). Chosen after probing the catalog:
   fastest (~0.8s), code-specialized, structured-output `parse` works.
 - **Validated end-to-end on CPU demo:** `configs/demo_repo_baseten.yaml` → **72.2× on demo_repo**,
   3 accepted / 2 correctly rejected, worker shown as `compat:moonshotai/Kimi-K2.7-Code`.
+- **Recorded TinyGPT GPU searches:** `submission/h100_2026-09-19/` contains three reports with
+  aggregate 1.460x, 1.379x, and 1.468x tokens/sec speedups. The artifact README identifies an
+  H100 80GB workstation and torch 2.11+cu128, but the repository lacks an independent host,
+  driver, and environment capture. These are not Dryft-model results.
 - **Configs ready:** `configs/demo_repo_baseten.yaml` (CPU validation), `configs/dryft_local.yaml`
   (H100, `execution: local`, no Docker — the fast path), `configs/dryft_h100.yaml` (H100 in Docker).
 - **Docs:** `docs/BASETEN.md`, `docs/H100_WORKSTATION_SETUP.md`, `docs/H100_RUNBOOK.md`,
   `docs/GPU_TROUBLESHOOTING.md`. One-shot script: `scripts/h100_setup.sh`.
 - **Local GPU (Windows RTX 5060) works** (~1.5–2× on the tiny transformer); 222 tests pass.
 
-## What is NOT done / NOT tested (your job)
-1. **Run on a real Baseten H100** and capture the headline **tokens/sec** (baseline vs optimized).
-2. **Swap in Dryft's actual model** if they provide one (`targets/torch_transformer/SWAP_DRYFT.md`) —
-   mirror their exact `tests/check.py` correctness definition. Otherwise the tiny stand-in is used.
-3. Rotate the API keys after the event (they were shared in chat).
+## What still needs validation
+1. **Capture a hardware-attested H100 run**: save GPU name, driver, CUDA/PyTorch versions, target
+   commit, config snapshot, aggregate samples, and per-shape samples with the export.
+2. **Swap in Dryft's actual model** if they provide one (`targets/torch_transformer/SWAP_DRYFT.md`) and
+   mirror their exact `tests/check.py` correctness definition. The TinyGPT stand-in is not enough.
+3. **Exercise current Baseten worker quality** on the final target; the CPU demo result is historical.
+4. Rotate the API keys after the event (they were shared in chat).
 
 ## Exact steps to get the H100 (verified commands)
 
@@ -58,6 +65,9 @@ bash scripts/h100_setup.sh
 `scripts/h100_setup.sh` does: GPU check → venv + `pip install -e .[dev]` → torch/CUDA →
 baseline tokens/sec → `hotpath run configs/dryft_local.yaml --autocommit` → export. The final
 numbers land in `submission/REPORT.md`. Copy `submission/` to the checkpoint dir so it persists.
+The GPU config runs fixed p32_b1, p32_b2, p160_b1, and p160_b2 workloads each trial. Its aggregate
+is total generated tokens divided by synchronized elapsed time and each shape must retain at least
+98% of its parent's median throughput.
 
 ### Watch it live (optional)
 On the H100: `hotpath serve configs/dryft_local.yaml`. On your laptop:

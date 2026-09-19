@@ -1,6 +1,31 @@
-# Consolidated branch audit — 2026-09-18
+# A/B completion audit — 2026-09-19
 
-This audit applies to `implement/full-plan` after the prior feature work was combined. `main` remains unchanged. The branch has one checkout and no unresolved merge conflicts. The old task worktrees and local branch names were removed after their uncommitted diffs were backed up in ignored `.tmp/worktree-backups/`.
+The current checkout is `main` at base revision `cd757f0` plus the uncommitted A/B
+completion changes. The final local suite, including the real Chrome browser
+regression, passed **260 tests with 5 environment-dependent skips** and one
+non-failing Windows asyncio transport warning. The second offline target passed a ten-run reliability gate:
+the same one-change shipped lineage, one correctness rejection, one locked-file
+rejection, and no leaked worktrees in every attempt. The latest local attempts
+took 5.7–9.1 seconds. The real-browser dashboard regression passed in Chrome.
+
+Measurement hardening now stores per-workload samples for a fixed four-shape GPU
+matrix and rejects an aggregate win if any declared shape falls below the
+predeclared 98% retention floor. Torch CPU event profiles can render observed
+nested call stacks; cProfile and CUDA device-time profiles explain why a true
+time hierarchy is unavailable. Sentry remains disabled cleanly without a DSN;
+actual project delivery still requires a connected run.
+
+The local Python environment used for this audit does not have PyTorch, so the
+new transformer benchmark and added batch-size correctness cases were syntax
+checked and contract tested, but not executed here. Run them on the intended
+PyTorch/GPU host before presenting any new GPU number. The stored TinyGPT
+reports below predate the new workload matrix and must not be treated as its
+validation.
+
+## Prior consolidated audit (historical)
+
+The notes below applied to `implement/full-plan` before its feature work was
+combined into `main`. Their test count and branch description are historical.
 
 ## Verified behavior
 
@@ -20,8 +45,9 @@ This audit applies to `implement/full-plan` after the prior feature work was com
 
 ## Remaining limits and release gates
 
-- **No Dryft/H100 claim yet.** The bundled transformer is a development target. The H100 Docker image in `configs/dryft_h100.yaml` is a placeholder requiring an operator-reviewed build and a dedicated Linux GPU host. Run the real Dryft model, its reference tests, and varied workloads there before reporting a speedup.
-- **Live model quality is unmeasured after the worker changes.** OpenAI planner and worker roles are configured, but a fresh keyed run is needed to measure worker correctness failures and repeatability. Baseten is only an optional compatible endpoint, with no deployment validated.
+- **Recorded GPU evidence is TinyGPT-only.** `submission/h100_2026-09-19/` contains three Hotpath reports from the bundled `targets/torch_transformer` stand-in: 1.460x, 1.379x, and 1.468x aggregate tokens/sec. The artifact README identifies an H100 workstation, but no separate host/driver/environment capture is retained, so hardware identity is not independently verified by this repository. These reports do not validate Dryft's actual model.
+- **The next GPU claim needs the real target and full workload evidence.** The target now declares p32_b1, p32_b2, p160_b1, and p160_b2; each trial aggregates total generated tokens over synchronized time across the fixed matrix. The aggregate must pass Hotpath's existing threshold/CI gate, and every shape must retain at least 98% of parent median throughput. A release run must capture the official Dryft correctness contract, target commit, GPU name, driver, CUDA/PyTorch versions, config snapshot, and per-shape samples.
+- **Baseten is recorded but needs a fresh quality check.** `docs/BASETEN_HANDOFF.md` records an end-to-end CPU `demo_repo` run using `moonshotai/Kimi-K2.7-Code` through Baseten's compatible API (72.2x, 3 accepted and 2 rejected). This establishes a historical endpoint exercise, not repeatable current worker quality or a GPU result.
 - **Correctness is contract-relative.** Isolated execution prevents direct host access under the documented Docker threat model, but target code can still influence a test or benchmark executed in its own container. Locked files and passing tests do not prove semantic equivalence against an adversarial target; independent operator-owned verification is needed for that claim.
 - **Profiling and ablation are bounded.** Stored profiles retain top functions rather than call stacks. The profile comparison warns when tools disagree and bounds missing rows; it is not a significance test. Ablation remeasures the full stack alongside each omitted change and reports paired medians. Pruning is opt-in (`--prune`) and verified jointly; it never rewrites the run's head.
 - **Telemetry and UI deployment need operator validation.** Sentry delivery has not been checked against a real project. The dashboard is intentionally local-only; remote use requires an authenticated reverse proxy to the loopback listener.
