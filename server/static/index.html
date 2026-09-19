@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hotpath</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0F1720;--panel:#16202C;--panel-2:#1E2A38;--line:#2A3846;--line-strong:#3B4C5E;
+  --ink:#E6ECF2;--muted:#8A9AAB;--dim:#5C6C7C;
+  --hot:#F0A92E;--hot-soft:rgba(240,169,46,.14);
+  --ok:#3EC3A2;--ok-soft:rgba(62,195,162,.14);
+  --bad:#EF6F63;--bad-soft:rgba(239,111,99,.14);
+  --ai:#A78BFA;--ai-soft:rgba(167,139,250,.14);
+  --wait:#6FAEE0;--wait-soft:rgba(111,174,224,.14);
+  --sans:"IBM Plex Sans",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+a{color:var(--wait)}
+button{font:inherit;color:var(--ink);background:var(--panel-2);border:1px solid var(--line-strong);border-radius:6px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--hot)}
+button.primary{background:var(--hot);color:#1A1204;border-color:var(--hot);font-weight:600}
+button:disabled{opacity:.45;cursor:default}
+select{font:inherit;color:var(--ink);background:var(--panel-2);border:1px solid var(--line-strong);border-radius:6px;padding:6px 8px}
+.mono{font-family:var(--mono)}
+header{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+header h1{font-size:18px;margin:0;font-weight:600;letter-spacing:-.01em}
+header h1 span{color:var(--hot)}
+.tagline{color:var(--muted);font-size:13px}
+.spacer{flex:1}
+.status{display:inline-flex;align-items:center;gap:8px;padding:4px 10px;border-radius:999px;background:var(--panel-2);font-size:13px}
+.status .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.status.running .dot{background:var(--hot);animation:pulse 1.2s ease-in-out infinite}
+.status.finished .dot{background:var(--ok)}
+.status.failed .dot{background:var(--bad)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){.status.running .dot{animation:none}}
+main{padding:16px 20px 40px;display:grid;gap:16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.stat .lbl{font-size:12px;color:var(--muted)}
+.stat .val{font-family:var(--mono);font-size:22px;font-weight:500;margin-top:2px}
+.stat .sub{font-size:12px;color:var(--muted);margin-top:2px}
+.stat.hot .val{color:var(--hot)}
+.grid{display:grid;grid-template-columns:minmax(0,3fr) minmax(360px,2fr);gap:16px}
+@media(max-width:1000px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.card h2{font-size:13px;font-weight:600;margin:0;padding:10px 14px;border-bottom:1px solid var(--line);color:var(--muted);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.card h2 .right{margin-left:auto;font-weight:400}
+.card .body{padding:12px 14px}
+.scroll{overflow:auto}
+/* --- experiment tree --- */
+#tree{display:block;min-width:600px}
+#tree .node{cursor:pointer}
+#tree .node rect{fill:var(--panel-2);stroke:var(--line-strong);stroke-width:1}
+#tree .node.accepted rect{fill:var(--ok-soft);stroke:var(--ok)}
+#tree .node.not_selected rect{fill:var(--ok-soft);stroke:var(--ok);stroke-dasharray:4 3}
+#tree .node.rejected rect{fill:var(--bad-soft);stroke:var(--bad)}
+#tree .node.pending rect{fill:var(--wait-soft);stroke:var(--wait)}
+#tree .node.baseline rect{fill:var(--panel-2);stroke:var(--line-strong)}
+#tree .node.head rect{stroke:var(--hot);stroke-width:2}
+#tree .node.expanded rect{stroke-width:2}
+#tree .node.selected rect{filter:brightness(1.25)}
+#tree text{font-size:12px;fill:var(--ink);pointer-events:none}
+#tree text.sub{font-size:11px;fill:var(--muted);font-family:var(--mono)}
+#tree text.meta{font-size:10px;fill:var(--dim);font-family:var(--mono)}
+#tree .edge{fill:none;stroke:var(--line-strong);stroke-width:1.2}
+#tree .edge.head{stroke:var(--hot);stroke-width:2}
+#tree .edge.retry{stroke:var(--ai);stroke-width:1.4;stroke-dasharray:3 3}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted);font-weight:400}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px;border:1px solid}
+.legend .l-accepted i{background:var(--ok-soft);border-color:var(--ok)}
+.legend .l-not_selected i{background:var(--ok-soft);border-color:var(--ok);border-style:dashed}
+.legend .l-rejected i{background:var(--bad-soft);border-color:var(--bad)}
+.legend .l-pending i{background:var(--wait-soft);border-color:var(--wait)}
+.legend .l-head i{background:transparent;border-color:var(--hot);border-width:2px}
+.legend .l-retry i{background:transparent;border:0;border-top:2px dashed var(--ai);height:0;border-radius:0;width:14px;vertical-align:3px}
+canvas{display:block;width:100%}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:6px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:3px 10px;font-size:12px;background:var(--panel-2)}
+.seg button[aria-pressed="true"]{background:var(--hot);color:#1A1204;font-weight:600}
+.seg button:disabled{opacity:.4}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:500;font-family:var(--mono)}
+.b-accepted{background:var(--ok-soft);color:var(--ok)}
+.b-not_selected{background:var(--ok-soft);color:var(--ok);outline:1px dashed var(--ok)}
+.b-rejected{background:var(--bad-soft);color:var(--bad)}
+.b-pending{background:var(--wait-soft);color:var(--wait)}
+.b-baseline{background:var(--panel-2);color:var(--muted)}
+.verdict{border-radius:6px;padding:10px 12px;margin:0 0 12px;font-size:13px;border-left:4px solid var(--line-strong);background:var(--panel-2)}
+.verdict.ok{border-left-color:var(--ok)}.verdict.bad{border-left-color:var(--bad)}.verdict.wait{border-left-color:var(--wait)}
+.verdict b{display:block;margin-bottom:2px}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:4px 12px;font-size:13px;margin:0 0 12px}
+.kv dt{color:var(--muted)}.kv dd{margin:0}
+.section{font-size:12px;color:var(--muted);text-transform:none;margin:14px 0 6px;font-weight:600}
+pre{font-family:var(--mono);font-size:12px;line-height:1.5;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px;margin:0;overflow:auto;max-height:320px;white-space:pre}
+pre.diff .add{color:var(--ok)}pre.diff .del{color:var(--bad)}pre.diff .hunk{color:var(--wait)}pre.diff .meta{color:var(--dim)}
+.bench{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px}
+.bench .box{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+.bench .lbl{font-size:11px;color:var(--muted)}.bench .val{font-family:var(--mono);font-size:16px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px}
+tr.row{cursor:pointer}tr.row:hover td{background:var(--panel-2)}tr.row.selected td{background:var(--hot-soft)}
+tr.row.isretry td:first-child{border-left:2px solid var(--ai)}
+.bar{height:16px;border-radius:3px;background:var(--hot);opacity:.85}
+.prof{display:grid;grid-template-columns:auto 1fr 60px;gap:4px 10px;align-items:center;font-size:12px}
+.prof .name{font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+.prof .name.ro{color:var(--muted)}
+.prof .flame{position:relative}
+.prof .flame .tot{height:16px;border-radius:3px;background:var(--hot-soft);border:1px solid var(--hot);overflow:hidden;min-width:2px}
+.prof .flame .tot.ro{background:rgba(92,108,124,.18);border-color:var(--dim)}
+.prof .flame .tot .self{height:100%;background:var(--hot)}
+.prof .flame .tot.ro .self{background:var(--dim)}
+/* --- bottleneck diff --- */
+.bnhead{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px}
+.bnhead .box{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+.bnhead .lbl{font-size:11px;color:var(--muted)}
+.bnhead .val{font-family:var(--mono);font-size:15px}
+.bnrow{display:grid;grid-template-columns:minmax(90px,170px) minmax(0,1fr) 74px;gap:10px;align-items:center;padding:3px 0}
+.bnrow .nm{font-family:var(--mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bnrow .nm.ro{color:var(--muted)}
+.bnbars{display:grid;gap:2px}
+.bnbar{height:9px;border-radius:2px;background:rgba(92,108,124,.14);position:relative;overflow:hidden}
+.bnbar .fill{height:100%;border-radius:2px;min-width:1px}
+.bnbar.before .fill{background:var(--dim)}
+.bnbar.after .fill{background:var(--hot)}
+.bnbar .fill.bounded{background-image:repeating-linear-gradient(135deg,var(--dim) 0 3px,transparent 3px 6px);background-color:transparent;outline:1px dashed var(--dim);outline-offset:-1px}
+.bnbar.after .fill.bounded{background-image:repeating-linear-gradient(135deg,var(--hot) 0 3px,transparent 3px 6px);outline-color:var(--hot)}
+.bndelta{font-family:var(--mono);font-size:11px;text-align:right;white-space:nowrap}
+.bndelta.shrank{color:var(--ok)}.bndelta.grew{color:var(--bad)}
+.bndelta.unchanged,.bndelta.below_cutoff_after,.bndelta.new{color:var(--muted)}
+.bnresidual{border-top:1px dashed var(--line);margin-top:6px;padding-top:6px}
+.funnel{display:grid;gap:6px}
+.funnel .r{display:grid;grid-template-columns:150px 1fr 40px;gap:10px;align-items:center;font-size:12px}
+.funnel .r .f{height:18px;border-radius:3px}
+.log{font-family:var(--mono);font-size:12px;color:var(--muted);max-height:260px;overflow:auto;white-space:pre-wrap}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+.hint{font-size:12px;color:var(--dim)}
+.spark{vertical-align:middle}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Hotpath</span></h1>
+  <span class="tagline">AI proposes optimizations. The harness proves whether they work.</span>
+  <div class="spacer"></div>
+  <select id="runSel" title="Run"></select>
+  <span id="status" class="status"><span class="dot"></span><span id="statusText">no run</span></span>
+  <button id="stopBtn" style="display:none">Stop</button>
+  <button id="startBtn" class="primary">Start run</button>
+</header>
+
+<main>
+  <div id="connectionError" class="verdict bad" role="alert" hidden></div>
+  <div class="stats" id="stats"></div>
+
+  <div class="grid">
+    <div style="display:grid;gap:16px;min-width:0">
+      <div class="card">
+        <h2>Experiment tree
+          <span class="legend">
+            <span class="l-accepted"><i></i>accepted</span>
+            <span class="l-not_selected"><i></i>not selected</span>
+            <span class="l-rejected"><i></i>rejected</span>
+            <span class="l-pending"><i></i>in progress</span>
+            <span class="l-head"><i></i>current head</span>
+            <span class="l-retry"><i></i>retry</span>
+          </span>
+          <span class="right hint" id="treeHint">click a node for details</span>
+        </h2>
+        <div class="scroll"><svg id="tree" width="100%" height="200"></svg></div>
+      </div>
+      <div class="card">
+        <h2><span id="chartTitle">Progress</span>
+          <span class="seg" id="chartMode">
+            <button data-mode="raw" aria-pressed="false">raw</button>
+            <button data-mode="speedup" aria-pressed="true">speedup ×</button>
+          </span>
+          <span class="right hint" id="chartHint"></span>
+        </h2>
+        <div class="body"><canvas id="chart" height="240"></canvas><div class="hint" id="chartNote" style="margin-top:6px"></div></div>
+      </div>
+      <div class="card">
+        <h2>Experiments <span class="right" id="funnelSummary"></span></h2>
+        <div class="scroll"><table id="expTable"><thead><tr><th>#</th><th>Iter</th><th>Hypothesis</th><th>Status</th><th>vs parent</th><th>vs baseline</th><th>Why</th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <div style="display:grid;gap:16px;min-width:0;align-content:start">
+      <div class="card">
+        <h2>Detail</h2>
+        <div class="body" id="detail"><div class="empty">Select an experiment</div></div>
+      </div>
+      <div class="card">
+        <h2>Verification contract <span class="right hint">locked: the agent cannot edit these</span></h2>
+        <div class="body" id="contract"></div>
+      </div>
+      <div class="card">
+        <h2>Bottleneck diff <span class="right hint" id="bnTool"></span></h2>
+        <div class="body" id="bottleneck"></div>
+      </div>
+      <div class="card">
+        <h2>Profile of current head <span class="right hint" id="profTool"></span></h2>
+        <div class="body" id="profile"></div>
+      </div>
+      <div class="card">
+        <h2>Funnel</h2>
+        <div class="body funnel" id="funnel"></div>
+      </div>
+      <div class="card">
+        <h2>Run log</h2>
+        <div class="body log" id="runlog"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const state = {
+  data: null, selected: null, runId: null,
+  tree: null, chart: null, diff: null,          // server-derived views
+  viewKey: null, diffKey: null,                 // cache stamps so polling does not refetch needlessly
+  chartMode: null, revision: 0, timer: null,
+};
+const REJECTED = new Set(["patch_failed","locked_file","rejected_correctness","rejected_speed","timeout","error"]);
+const kind = s => s === "accepted" ? "accepted" : s === "not_selected" ? "not_selected" : REJECTED.has(s) ? "rejected" : "pending";
+const fmt = (x, d=3) => x == null ? "–" : Number(x).toFixed(d);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const trunc = (s, n) => String(s ?? "").length > n ? String(s).slice(0, n - 1) + "…" : String(s ?? "");
+const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+
+// Metric values span tokens/sec in the hundreds and seconds in the microseconds, so precision is
+// chosen from magnitude rather than from the metric's name.
+function fmtMetric(v) {
+  if (v == null || !isFinite(v)) return "–";
+  const a = Math.abs(v);
+  if (a >= 1000) return v.toFixed(0);
+  if (a >= 100) return v.toFixed(1);
+  if (a >= 10) return v.toFixed(2);
+  if (a >= 1) return v.toFixed(3);
+  return v.toFixed(5);
+}
+function fmtSeconds(v) { return v == null ? "–" : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4)) + "s"; }
+
+// localStorage can throw (private windows, blocked site data) and must never break a render.
+function remember(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function recall(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+async function getJSON(url) { const r = await fetch(url); if (!r.ok) throw new Error(url + " -> " + r.status); return r.json(); }
+
+function showError(e) {
+  const el = $("#connectionError"); el.hidden = false;
+  el.textContent = "Dashboard data may be stale. " + e.message + " Retrying automatically.";
+}
+function selectRun(id) {
+  state.revision++; state.runId = id; state.selected = null;
+  state.data = state.tree = state.chart = state.funnel = state.diff = null;
+  state.viewKey = state.diffKey = null;
+  $("#detail").textContent = "Loading selected run…";
+  clearTimeout(state.timer); poll();
+}
+async function poll() {
+  const revision = state.revision;
+  try {
+    await loadRuns();
+    if (revision !== state.revision) return;
+    const url = "/api/state" + (state.runId ? "?run_id=" + encodeURIComponent(state.runId) : "");
+    const data = await getJSON(url);
+    const views = await refreshViews(data);
+    if (revision !== state.revision) return;
+    state.data = data; Object.assign(state, views);
+    render();
+    $("#connectionError").hidden = true;
+  } catch (e) {
+    // Fetch hiccups are expected while a run writes; a render bug is not. Surface both rather than
+    // polling silently against a broken page.
+    console.error("hotpath poll/render failed", e);
+    if (revision === state.revision) showError(e);
+  }
+  if (revision === state.revision) state.timer = setTimeout(poll, state.data && state.data.live ? 1200 : 3000);
+}
+
+// The derived views are refetched only when the run actually changed. The bottleneck diff is keyed
+// on the head commit alone, because it can only change when a new head is adopted and re-profiled.
+async function refreshViews(data) {
+  const run = data.run;
+  if (!run) return {tree: null, chart: null, funnel: null, diff: null, viewKey: null, diffKey: null};
+  const result = {};
+  const viewKey = JSON.stringify([run, data.experiments]);
+  if (viewKey !== state.viewKey) {
+    const [tree, chart, funnel] = await Promise.all([
+      getJSON(`/api/runs/${run.id}/tree`), getJSON(`/api/runs/${run.id}/chart`),
+      getJSON(`/api/runs/${run.id}/funnel`),
+    ]);
+    Object.assign(result, {tree, chart, funnel, viewKey});
+  }
+  const diffKey = JSON.stringify([run.id, run.baseline_profile, run.head_profile, run.best_speedup]);
+  if (diffKey !== state.diffKey) {
+    result.diff = await getJSON(`/api/runs/${encodeURIComponent(run.id)}/profile_diff`);
+    result.diffKey = diffKey;
+  }
+  return result;
+}
+
+async function loadRuns() {
+  const runs = await getJSON("/api/runs");
+  const sel = $("#runSel"); const cur = state.runId || sel.value;
+  sel.replaceChildren(...runs.map(r => new Option(`${r.id} · ${r.config_name} · ${r.status} · ${fmt(r.best_speedup,2)}x`, r.id)));
+  if (cur && [...sel.options].some(o => o.value === cur)) sel.value = cur;
+  sel.onchange = () => selectRun(sel.value);
+}
+
+$("#startBtn").onclick = async () => {
+  try {
+  const r = await fetch("/api/runs", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"});
+  const j = await r.json();
+  if (!r.ok) { alert(j.detail || "could not start"); return; }
+  selectRun(j.run_id);
+  } catch (e) { showError(e); }
+};
+$("#stopBtn").onclick = async () => {
+  try {
+    const run = state.data && state.data.run;
+    if (run) {
+      const response = await fetch(`/api/runs/${encodeURIComponent(run.id)}/stop`, {method:"POST"});
+      if (!response.ok) throw new Error("Stop failed: " + response.status);
+      $("#stopBtn").textContent = "Stopping…";
+    }
+  } catch (e) { showError(e); }
+};
+$("#chartMode").querySelectorAll("button").forEach(b => b.onclick = () => {
+  state.chartMode = b.dataset.mode; remember("hotpath.chartMode", state.chartMode); render();
+});
+
+function render() {
+  const d = state.data; if (!d) return; const run = d.run;
+  $("#startBtn").disabled = !!d.live;
+  $("#stopBtn").style.display = d.live ? "" : "none";
+  const st = $("#status"); st.className = "status " + (run ? (d.live ? "running" : run.status) : "");
+  $("#statusText").textContent = run ? (d.live ? `running · iteration ${run.iteration}/${run.total_iterations}` : run.status + (run.error ? " · " + run.error : "")) : "no run";
+  if (!run) { $("#stats").innerHTML = ""; $("#tree").innerHTML = ""; $("#expTable tbody").innerHTML = ""; $("#runlog").textContent = d.config ? `Ready. Target: ${d.config.target}` : ""; return; }
+  const exps = d.experiments;
+  renderStats(run, exps); renderTree(); renderChart(); renderTable(exps);
+  renderBottleneck(); renderProfile(run); renderFunnel(); renderContract(d.config); renderDetail(run, exps);
+  $("#runlog").textContent = run.logs.slice(-80).join("\n"); $("#runlog").scrollTop = 1e9;
+  const sel = $("#runSel"); const opt = [...sel.options].find(o => o.value === run.id);
+  if (opt) opt.textContent = `${run.id} · ${run.config_name} · ${run.status} · ${fmt(run.best_speedup,2)}x`;
+}
+
+function renderStats(run, exps) {
+  const b = run.baseline_benchmark, h = run.head_benchmark;
+  const unit = b ? b.metric : "";
+  const acc = exps.filter(e => e.status === "accepted").length, rej = exps.filter(e => REJECTED.has(e.status)).length;
+  const thr = state.chart && state.chart.noise_band ? state.chart.threshold_speedup : null;
+  $("#stats").innerHTML = [
+    ["Baseline", b ? fmt(b.median, 5) : "–", unit + (b ? ` · ${b.n} samples` : "")],
+    ["Current head", h ? fmt(h.median, 5) : "–", unit + (run.head_experiment_id ? " · " + run.head_experiment_id : " · baseline")],
+    ["Speedup", fmt(run.best_speedup, 3) + "x", "vs baseline", "hot"],
+    ["Accepted / rejected", `${acc} / ${rej}`, `${exps.length} experiments`],
+    ["Noise floor", b ? (run.baseline_noise_cv * 100).toFixed(2) + "%" : "–", `run-to-run CV · threshold ${thr ? thr.toFixed(3) + "x" : "–"}`],
+  ].map(([l, v, s, c]) => `<div class="stat ${c||""}"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div><div class="sub">${esc(s)}</div></div>`).join("");
+}
+
+// --------------------------------------------------------------------------- //
+// Experiment tree — layout, retry links and beam membership come from the server
+// --------------------------------------------------------------------------- //
+function renderTree() {
+  const t = state.tree; const svg = $("#tree");
+  if (!t || !t.nodes.length) { svg.innerHTML = ""; return; }
+  const W = 210, H = 58, CX = 250, CY = 74, PAD = 20;
+  const at = {}; t.nodes.forEach(n => at[n.id] = { x: PAD + n.column * CX, y: PAD + n.row * CY, n });
+  const width = PAD * 2 + (t.columns - 1) * CX + W, height = PAD * 2 + t.max_row * CY + H;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("height", Math.max(120, height));
+  svg.style.minWidth = width + "px";
+
+  let out = "";
+  for (const e of t.edges) {
+    const a = at[e.from_id], b = at[e.to_id]; if (!a || !b) continue;
+    if (e.kind === "retry") {
+      // Same column as the original (a retry shares its iteration), so the link runs vertically
+      // down the node's left edge rather than across the canvas.
+      const x = a.x + W * 0.18;
+      out += `<path class="edge retry" d="M${x} ${a.y + H} C${x} ${a.y + H + 20},${b.x + W * 0.18} ${b.y - 20},${b.x + W * 0.18} ${b.y}"/>`;
+    } else {
+      out += `<path class="edge ${e.on_head_chain ? "head" : ""}" d="M${a.x + W} ${a.y + H/2} C${a.x + W + 30} ${a.y + H/2},${b.x - 30} ${b.y + H/2},${b.x} ${b.y + H/2}"/>`;
+    }
+  }
+  for (const n of t.nodes) {
+    const p = at[n.id];
+    const cls = [n.kind, n.is_head ? "head" : "", n.expanded_at.length ? "expanded" : "",
+                 state.selected === n.id ? "selected" : ""].filter(Boolean).join(" ");
+    const title = (n.retry_of ? "↻ " : "") + trunc(n.title, n.retry_of ? 28 : 30);
+    const meta = [
+      n.expanded_at.length ? `⑂ expanded it ${n.expanded_at.join(",")}` : "",
+      n.retry_depth ? `attempt ${n.retry_depth + 1}` : "",
+    ].filter(Boolean).join(" · ");
+    const tip = [n.title, n.status, n.reject_reason].filter(Boolean).join(" — ");
+    out += `<g class="node ${esc(cls)}" data-id="${esc(n.id)}" transform="translate(${p.x},${p.y})"><title>${esc(tip)}</title>`
+      + `<rect width="${W}" height="${H}" rx="6"/>`
+      + `<text x="10" y="19">${esc(title)}</text>`
+      + `<text class="sub" x="10" y="36">${esc(n.subtitle)}</text>`
+      + (meta ? `<text class="meta" x="10" y="50">${esc(meta)}</text>` : "")
+      + `</g>`;
+  }
+  svg.innerHTML = out;
+  svg.querySelectorAll(".node").forEach(n => n.onclick = () => { state.selected = n.dataset.id; render(); });
+}
+
+// --------------------------------------------------------------------------- //
+// Progress chart — raw metric units or speedup, with the acceptance noise band
+// --------------------------------------------------------------------------- //
+function chartMode() {
+  const c = state.chart;
+  if (!c) return "speedup";
+  if (state.chartMode === null) state.chartMode = recall("hotpath.chartMode");
+  // Raw units are the more legible story for a higher-is-better metric (tokens/sec climbing), so
+  // that is the default there; elsewhere speedup stays the headline.
+  const want = state.chartMode || (c.higher_is_better ? "raw" : "speedup");
+  return (want === "raw" && c.raw_available) ? "raw" : "speedup";
+}
+
+function renderChart() {
+  const c = state.chart; const cv = $("#chart");
+  const mode = chartMode();
+  const rawBtn = $('#chartMode button[data-mode="raw"]');
+  rawBtn.disabled = !c || !c.raw_available;
+  rawBtn.title = c && !c.raw_available ? c.raw_unavailable_reason : "plot the measured metric in its own units";
+  $("#chartMode").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
+  $("#chartTitle").textContent = mode === "raw" ? `${c.metric} per experiment` : "Speedup vs baseline";
+  $("#chartHint").textContent = mode === "raw"
+    ? (c.higher_is_better ? "higher is better ↑" : "lower is better ↓") + " · line = best accepted so far"
+    : "line = best accepted so far; dots = every measured experiment";
+
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth || 600, h = 240;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  if (!c || !c.points.length) {
+    ctx.fillStyle = css("--muted"); ctx.font = "12px " + css("--sans");
+    ctx.fillText("no measured experiments yet", 12, h / 2);
+    $("#chartNote").textContent = ""; return;
+  }
+
+  const hib = c.higher_is_better;
+  const band = c.noise_band;
+  const val = p => mode === "raw" ? p.raw : p.speedup_vs_baseline;
+  const bestOf = p => mode === "raw" ? p.best_raw : p.best_speedup;
+  const measured = c.points.filter(p => val(p) != null);
+
+  // y domain. Raw mode is not zero-based on purpose: a 1.2x tokens/sec gain vanishes against a zero
+  // origin. The baseline is drawn as an explicit labelled reference instead, so the scale stays
+  // readable without flattering the result.
+  let lo, hi;
+  const vals = measured.map(val);
+  measured.forEach(p => { if (bestOf(p) != null) vals.push(bestOf(p)); });
+  if (mode === "raw") {
+    vals.push(c.baseline_raw);
+    if (band) vals.push(band.lower, band.upper);
+    measured.forEach(p => (p.samples || []).forEach(s => vals.push(s)));
+    lo = Math.min(...vals); hi = Math.max(...vals);
+    const pad = (hi - lo) * 0.12 || Math.abs(hi) * 0.1 || 1;
+    lo -= pad; hi += pad;
+    if (!hib) lo = Math.max(0, lo);      // negative durations are meaningless
+  } else {
+    vals.push(1.0, band ? band.threshold_speedup : 1.05);
+    lo = 0; hi = Math.max(...vals) * 1.08;
+  }
+  if (!(hi > lo)) { hi = lo + 1; }
+
+  const L = 62, R = 14, T = 12, B = 30;
+  const n = Math.max(c.points.length, 2);
+  const X = i => L + (w - L - R) * (i / (n - 1));
+  const Y = v => T + (h - T - B) * (1 - (v - lo) / (hi - lo));
+  const label = v => mode === "raw" ? fmtMetric(v) : v.toFixed(2) + "x";
+
+  // grid + ticks
+  ctx.strokeStyle = css("--line"); ctx.fillStyle = css("--muted");
+  ctx.font = "11px " + css("--mono"); ctx.lineWidth = 1;
+  for (let t = 0; t <= 4; t++) {
+    const v = lo + (hi - lo) * t / 4;
+    ctx.beginPath(); ctx.moveTo(L, Y(v)); ctx.lineTo(w - R, Y(v)); ctx.stroke();
+    ctx.fillText(label(v), 4, Y(v) + 4);
+  }
+
+  // iteration separators
+  ctx.strokeStyle = css("--line"); ctx.setLineDash([2, 3]);
+  let prevIter = null;
+  c.points.forEach(p => {
+    if (prevIter !== null && p.iteration !== prevIter) {
+      ctx.beginPath(); ctx.moveTo(X(p.index) - (w - L - R) / (n - 1) / 2, T);
+      ctx.lineTo(X(p.index) - (w - L - R) / (n - 1) / 2, h - B); ctx.stroke();
+    }
+    prevIter = p.iteration;
+  });
+  ctx.setLineDash([]);
+
+  // Baseline threshold reference, not a confidence interval or a candidate acceptance verdict.
+  if (band) {
+    const bl = mode === "raw" ? band.lower : 1 / band.threshold_speedup;
+    const bu = mode === "raw" ? band.upper : band.threshold_speedup;
+    const yTop = Y(Math.max(bl, bu)), yBot = Y(Math.min(bl, bu));
+    ctx.fillStyle = "rgba(138,154,171,.13)";
+    ctx.fillRect(L, Math.min(yTop, yBot), w - L - R, Math.abs(yBot - yTop));
+    ctx.strokeStyle = css("--dim"); ctx.setLineDash([4, 3]);
+    [bl, bu].forEach(v => { ctx.beginPath(); ctx.moveTo(L, Y(v)); ctx.lineTo(w - R, Y(v)); ctx.stroke(); });
+    ctx.setLineDash([]);
+  }
+
+  // baseline reference
+  const baseVal = mode === "raw" ? c.baseline_raw : 1.0;
+  if (baseVal != null) {
+    ctx.strokeStyle = css("--wait"); ctx.setLineDash([6, 4]); ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(L, Y(baseVal)); ctx.lineTo(w - R, Y(baseVal)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = css("--wait");
+    ctx.fillText("baseline " + label(baseVal), L + 4, Y(baseVal) - 5);
+  }
+
+  ctx.fillStyle = css("--muted");
+  ctx.fillText("experiments (chronological) →", L, h - 8);
+
+  // best-so-far staircase
+  ctx.strokeStyle = css("--hot"); ctx.lineWidth = 2.2; ctx.beginPath();
+  let started = false, prevBest = null;
+  c.points.forEach(p => {
+    const b = bestOf(p); if (b == null) return;
+    const x = X(p.index), y = Y(b);
+    if (!started) { ctx.moveTo(L, y); started = true; }
+    else { ctx.lineTo(x, Y(prevBest)); }
+    ctx.lineTo(x, y); prevBest = b;
+  });
+  if (started) ctx.lineTo(w - R, Y(prevBest));
+  ctx.stroke();
+
+  // per-experiment marks
+  c.points.forEach(p => {
+    const x = X(p.index), v = val(p);
+    if (v == null) {
+      // Never benchmarked (patch_failed, locked_file, …): still part of the story, so it gets a
+      // tick on the axis rather than being dropped from the series.
+      ctx.strokeStyle = css("--bad"); ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(x, h - B); ctx.lineTo(x, h - B - 6); ctx.stroke();
+      return;
+    }
+    if (mode === "raw") {
+      ctx.fillStyle = "rgba(138,154,171,.5)";
+      (p.samples || []).forEach(s => { ctx.beginPath(); ctx.arc(x, Y(s), 1.2, 0, Math.PI * 2); ctx.fill(); });
+    }
+    const k = p.kind;
+    ctx.fillStyle = css(k === "rejected" ? "--bad" : k === "accepted" ? "--ok" : k === "not_selected" ? "--ok" : "--wait");
+    ctx.beginPath(); ctx.arc(x, Y(v), p.experiment_id === state.selected ? 6 : 4, 0, Math.PI * 2); ctx.fill();
+    if (p.retry_of) { ctx.strokeStyle = css("--ai"); ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, Y(v), 7, 0, Math.PI * 2); ctx.stroke(); }
+  });
+
+  const notes = [];
+  if (band) notes.push(`Shaded band is a ${band.threshold_speedup.toFixed(3)}x threshold reference around baseline (noise CV ${(band.noise_cv*100).toFixed(2)}%), not a confidence interval. Each verdict compares the candidate against its own parent.`);
+  else notes.push("Historical threshold settings are unknown; no threshold band is shown.");
+  notes.push(mode === "raw" ? "Faint dots are the individual benchmark samples. Red ticks are experiments that never reached a benchmark."
+                            : "Parent-relative confidence intervals appear in experiment details. Red ticks never reached a benchmark.");
+  $("#chartNote").textContent = notes.join(" ");
+}
+
+function renderTable(exps) {
+  const num = {}; let i = 0;
+  exps.forEach(e => { if (!e.retry_of) { i += 1; num[e.id] = String(i); } });
+  exps.forEach(e => { if (e.retry_of) num[e.id] = (num[e.retry_of] || "?") + "↻"; });
+  $("#expTable tbody").innerHTML = exps.map(e => `<tr class="row ${state.selected === e.id ? "selected" : ""} ${e.retry_of ? "isretry" : ""}" data-id="${esc(e.id)}">
+    <td class="mono">${num[e.id] || ""}</td><td>${e.iteration}</td>
+    <td>${esc(e.hypothesis.idea)}<div class="hint">${esc(hypFiles(e).join(", "))}${e.retry_of ? ` · ↻ retry of ${esc(num[e.retry_of] || e.retry_of)}` : ""}</div></td>
+    <td><span class="badge b-${kind(e.status)}">${esc(e.status)}</span></td>
+    <td class="mono">${e.comparison ? fmt(e.comparison.speedup_vs_parent) + "x" : "–"}</td>
+    <td class="mono">${e.comparison ? fmt(e.comparison.speedup_vs_baseline) + "x" : "–"}</td>
+    <td class="hint">${esc(trunc(e.reject_reason || (e.status === "accepted" ? "correct and faster: new head" : ""), 90))}</td></tr>`).join("");
+  document.querySelectorAll("#expTable .row").forEach(r => r.onclick = () => { state.selected = r.dataset.id; render(); });
+  const f = state.funnel;
+  $("#funnelSummary").textContent = f && f.attempts ? `${f.shipped} shipped · ${f.accepted} accepted · ${f.attempts} attempts` : "";
+}
+
+// --------------------------------------------------------------------------- //
+// Bottleneck diff — before/after per function, with bounded claims for absences
+// --------------------------------------------------------------------------- //
+function renderBottleneck() {
+  const d = state.diff; const el = $("#bottleneck");
+  $("#bnTool").textContent = d && d.comparable ? `${d.before_tool} · ${d.before_commit.slice(0,8)} → ${d.after_commit.slice(0,8)}` : "";
+  if (!d) { el.innerHTML = `<div class="hint">loading…</div>`; return; }
+  if (!d.comparable) { el.innerHTML = `<div class="hint">${esc(d.incomparable_reason)}</div>`; return; }
+
+  const scale = Math.max(...d.rows.map(r => Math.max(r.before_self || 0, r.after_self || 0, r.bound || 0)), 1e-12);
+  const pct = v => Math.max(0.6, Math.min(100, (v / scale) * 100));
+  const rows = d.rows.slice(0, 14);
+  // "Everything else" has to cover both the untracked residual and the rows trimmed for space,
+  // otherwise the visible bars quietly stop adding up to the stated total.
+  const hidden = d.rows.slice(14);
+  const sum = (arr, k) => arr.reduce((a, r) => a + (r[k] || 0), 0);
+  const elseBefore = d.before_residual + sum(hidden, "before_self");
+  const elseAfter = d.after_residual + sum(hidden, "after_self");
+
+  const bar = (cls, v, bounded) =>
+    `<div class="bnbar ${cls}">${v == null ? "" : `<div class="fill ${bounded ? "bounded" : ""}" style="width:${pct(v).toFixed(1)}%"></div>`}</div>`;
+
+  const deltaText = r => {
+    if (r.delta_ratio != null) {
+      const p = (r.delta_ratio - 1) * 100;
+      if (r.classification === "unchanged") return "≈ flat";
+      return (p < 0 ? "↓" : "↑") + Math.abs(p).toFixed(0) + "%";
+    }
+    if (r.classification === "new") return "new";
+    if (r.classification === "below_cutoff_after") {
+      if (r.bound === 0) return "gone";          // untruncated profile: absence really is absence
+      return r.bound != null ? "≤" + fmtSeconds(r.bound) : "absent";
+    }
+    return r.classification;
+  };
+
+  el.innerHTML =
+    `<div class="bnhead">
+      <div class="box"><div class="lbl">total self time</div><div class="val">${fmtSeconds(d.before_total)} → ${fmtSeconds(d.after_total)}</div></div>
+      <div class="box"><div class="lbl">profile ratio</div><div class="val">${d.total_ratio ? d.total_ratio.toFixed(2) + "x" : "–"}</div></div>
+      <div class="box"><div class="lbl">benchmark says</div><div class="val">${d.benchmark_speedup ? d.benchmark_speedup.toFixed(3) + "x" : "–"}</div></div>
+    </div>`
+    + (d.coherence_warning ? `<div class="verdict wait">${esc(d.coherence_warning)}</div>` : "")
+    + rows.map(r => {
+        const name = (r.file ? `${r.file} ${r.function}` : r.function) + (r.ambiguous ? " ⚠" : "");
+        const tip = [
+          (r.file ? `${r.file}:${r.line} ` : "") + r.function,
+          `baseline ${r.before_self == null ? "absent" : fmtSeconds(r.before_self)} · head ${r.after_self == null ? "absent" : fmtSeconds(r.after_self)}`,
+          r.before_pct != null || r.after_pct != null ? `share ${r.before_pct == null ? "–" : r.before_pct.toFixed(1) + "%"} → ${r.after_pct == null ? "–" : r.after_pct.toFixed(1) + "%"}` : "",
+          r.bound_note,
+          r.ambiguous ? "Several rows shared this name in one file and were summed." : "",
+        ].filter(Boolean).join("\n");
+        return `<div class="bnrow" title="${esc(tip)}">
+          <div class="nm ${r.editable ? "" : "ro"}">${esc(trunc(name, 30))}</div>
+          <div class="bnbars">${bar("before", r.before_self != null ? r.before_self : r.bound, r.before_self == null)}${bar("after", r.after_self != null ? r.after_self : r.bound, r.after_self == null)}</div>
+          <div class="bndelta ${esc(r.classification)}">${esc(deltaText(r))}</div>
+        </div>`;
+      }).join("")
+    + `<div class="bnrow bnresidual" title="The ${hidden.length} function(s) not shown above, plus self time outside the retained rows, so the column reconciles with the total.">
+        <div class="nm ro">everything else${hidden.length ? ` (${hidden.length} more)` : ""}</div>
+        <div class="bnbars">${bar("before", elseBefore, false)}${bar("after", elseAfter, false)}</div>
+        <div class="bndelta unchanged">${fmtSeconds(elseBefore)}→${fmtSeconds(elseAfter)}</div>
+      </div>`
+    + `<div class="hint" style="margin-top:8px">Top bar = baseline, bottom = current head, on one absolute-seconds scale; sorted by what cost most at baseline.
+       Changes under ${(d.unchanged_epsilon*100).toFixed(0)}% read as flat — a display threshold, not a significance test: a profile is a single
+       observation with no measured noise floor. Hatched bars are bounds, not measurements${d.cutoff_known ? ` (a function absent from a truncated profile costs at most the smallest retained row)` : `; this run predates truncation tracking, so absences cannot be bounded`}.
+       ${esc(d.before_tool)} measures where time goes; the benchmark decides whether it got faster.</div>`;
+}
+
+function renderProfile(run) {
+  const p = run.head_profile; const el = $("#profile");
+  if (!p || !p.hotspots.length) { el.innerHTML = `<div class="hint">${esc(p && p.note || "no profile yet")}</div>`; return; }
+  $("#profTool").textContent = `${p.tool} · ${p.commit.slice(0,8)}`;
+  const rows = p.hotspots.slice(0, 12);
+  const maxTot = Math.max(...rows.map(h => h.total_time || h.self_time || 0)) || 1;
+  el.innerHTML = `<div class="prof">` + rows.map(h => {
+    const tot = h.total_time || h.self_time || 0;
+    const totW = tot / maxTot * 100;                                       // whole (cumulative) bar
+    const selW = tot > 0 ? Math.min(100, h.self_time / tot * 100) : 0;     // self share within it
+    const name = h.file ? `${h.file}:${h.line} ${h.function}` : h.function;
+    const title = `${h.function} — self ${h.self_time.toFixed(4)}s · total ${tot.toFixed(4)}s · ${h.calls} calls`;
+    return `<div class="name ${h.file ? "" : "ro"}" title="${esc(title)}">${esc(name)}</div>`
+      + `<div class="flame" title="${esc(title)}"><div class="tot ${h.file ? "" : "ro"}" style="width:${totW.toFixed(1)}%"><div class="self" style="width:${selW.toFixed(1)}%"></div></div></div>`
+      + `<div class="mono">${h.pct.toFixed(1)}%</div>`;
+  }).join("") + `</div><div class="hint" style="margin-top:8px">Bar width = total (cumulative) time; solid fill = self time, the remainder is time in callees. Amber = target code, grey = C builtins.
+    ${p.retained && p.n_functions_total > p.retained ? `Showing 12 of ${p.retained} retained (${p.n_functions_total} profiled).` : ""}</div>`;
+}
+
+// Every file a hypothesis may touch: its target first, then any extra (possibly new) files.
+const hypFiles = e => [e.hypothesis.target_file, ...(e.hypothesis.extra_files || []).filter(f => f !== e.hypothesis.target_file)];
+
+// The commands and patterns that decide correctness and speed, from the run's own config snapshot.
+// Known credentials are scrubbed server-side; the digest lets two runs' contracts be compared.
+function renderContract(cfg) {
+  const el = $("#contract");
+  if (!cfg) { el.innerHTML = `<div class="hint">This run has no configuration snapshot, so its contract is unknown.</div>`; return; }
+  const d = cfg.command_digests || {};
+  const cmd = (label, key) => cfg[key] ? `<dt>${label}</dt><dd><code class="mono">${esc(cfg[key])}</code>${d[key] ? ` <span class="hint mono">sha256:${esc(d[key])}</span>` : ""}</dd>` : "";
+  el.innerHTML = `<dl class="kv">${cmd("correctness", "test_cmd")}${cmd("benchmark", "bench_cmd")}${cmd("profile", "profile_cmd")}
+    <dt>locked</dt><dd class="mono">${esc(cfg.locked.join("  "))}</dd>
+    <dt>editable</dt><dd class="mono">${esc(cfg.editable.join("  "))}</dd></dl>
+    <div class="hint">A change is kept only if the correctness command exits 0 and the benchmark shows it faster beyond the noise. Edits to locked paths are refused before anything runs.</div>`;
+}
+
+// Counts come from /api/runs/{id}/funnel. "Shipped" is the final head's lineage, not every
+// acceptance: with beam search a correct, faster change can still miss the final head.
+function renderFunnel() {
+  const f = state.funnel;
+  if (!f) { $("#funnel").innerHTML = ""; return; }
+  const n = f.attempts, last = f.rows.length - 1;
+  $("#funnel").innerHTML = f.rows.map((r, i) => `<div class="r" title="${esc(r.meaning)}"><span>${esc(r.label)}</span><div><div class="f" style="width:${n ? (r.count / n * 100) : 0}%;background:${i === last ? "var(--ok)" : i >= 2 ? "var(--wait)" : "var(--ai)"}"></div></div><span class="mono">${r.count}</span></div>`).join("")
+    + (f.retries ? `<div class="hint" style="margin-top:4px">${n} attempts from ${f.hypotheses} distinct hypotheses (${f.retries} ${f.retries === 1 ? "retry" : "retries"} counted separately).</div>` : "");
+}
+
+function renderDetail(run, exps) {
+  const el = $("#detail");
+  if (!state.selected) { el.innerHTML = `<div class="empty">Select an experiment</div>`; return; }
+  if (state.selected === "baseline") {
+    const b = run.baseline_benchmark;
+    el.innerHTML = `<div class="verdict"><b>Baseline</b>Measured ${run.baseline_runs.length} separate benchmark runs of the untouched code. Progress uses this baseline; each acceptance verdict compares against its parent.</div>
+      <dl class="kv"><dt>commit</dt><dd class="mono">${esc(run.base_commit.slice(0,10))}</dd><dt>median</dt><dd class="mono">${b ? fmt(b.median,5) + " " + esc(b.metric) : "–"}</dd>
+      <dt>run medians</dt><dd class="mono">${run.baseline_runs.map(x => fmt(x,5)).join(", ")}</dd><dt>noise CV</dt><dd class="mono">${(run.baseline_noise_cv*100).toFixed(2)}%</dd></dl>
+      ${b ? spark(b.samples) : ""}`;
+    return;
+  }
+  const e = exps.find(x => x.id === state.selected); if (!e) { el.innerHTML = `<div class="empty">Experiment not found</div>`; return; }
+  const k = kind(e.status);
+  const verdictTitle = { accepted: "Accepted: correct and measurably faster", not_selected: "Correct and faster, but a sibling won", rejected_correctness: "Rejected: output changed", rejected_speed: "Rejected: not faster beyond noise", locked_file: "Blocked: tried to edit a locked file", patch_failed: "Patch did not apply", timeout: "Timed out", error: "Error" }[e.status] || `In progress: ${e.status}`;
+  const c = e.comparison, b = e.benchmark;
+  const parent = e.parent_id ? exps.find(x => x.id === e.parent_id) : null;
+  const parentBench = e.parent_benchmark || (parent ? parent.benchmark : run.baseline_benchmark);
+  const original = e.retry_of ? exps.find(x => x.id === e.retry_of) : null;
+  el.innerHTML = `
+    <div class="verdict ${k === "rejected" ? "bad" : k === "pending" ? "wait" : "ok"}"><b>${esc(verdictTitle)}</b>${esc(e.reject_reason || (c ? c.reason : ""))}</div>
+    <dl class="kv"><dt>id</dt><dd class="mono">${esc(e.id)}</dd><dt>parent</dt><dd class="mono">${esc(e.parent_id || "baseline")}</dd>
+      ${e.retry_of ? `<dt>retry of</dt><dd class="mono">${esc(e.retry_of)}${original ? ` <span class="hint">(${esc(original.status)})</span>` : ""}</dd>` : ""}
+      <dt>strategy</dt><dd>${esc(e.hypothesis.strategy)}</dd><dt>${hypFiles(e).length > 1 ? "files" : "target"}</dt><dd class="mono">${esc(hypFiles(e).join("  "))}</dd>
+      <dt>risk</dt><dd>${esc(e.hypothesis.risk)}</dd><dt>timings</dt><dd class="mono">${Object.entries(e.timings).map(([k,v]) => `${esc(k)} ${v.toFixed(1)}s`).join(" · ") || "–"}</dd></dl>
+    ${e.previous_failure ? `<div class="section">Fed back to the worker from ${esc(e.retry_of)}</div><pre>${esc(e.previous_failure.split("\n").slice(-14).join("\n"))}</pre>` : ""}
+    <div class="section">Planner rationale</div><div>${esc(e.hypothesis.rationale)}</div>
+    ${e.reasoning ? `<div class="section">Worker reasoning</div><div>${esc(e.reasoning)}</div>` : ""}
+    ${b ? `<div class="section">Benchmark (${esc(b.metric)}, ${b.higher_is_better ? "higher" : "lower"} is better)</div>
+      <div class="bench"><div class="box"><div class="lbl">${e.parent_benchmark ? "decision parent median" : "stored parent median (decision measurement unavailable)"}</div><div class="val">${parentBench ? fmt(parentBench.median,5) : "–"}</div></div>
+      <div class="box"><div class="lbl">candidate median</div><div class="val">${fmt(b.median,5)}</div></div>
+      ${c ? `<div class="box"><div class="lbl">speedup vs parent</div><div class="val">${fmt(c.speedup_vs_parent)}x</div></div>
+      <div class="box"><div class="lbl">${c.confidence != null ? fmt(c.confidence * 100, 0) + "% " : ""}CI vs parent · threshold</div><div class="val">[${fmt(c.ci_low,2)}, ${fmt(c.ci_high,2)}] · ${fmt(c.threshold,3)}x</div></div>` : `<div class="hint">Comparison unavailable; no acceptance verdict yet.</div>`}</div>
+      <div class="hint">candidate samples (n=${b.n}, CV ${(b.cv*100).toFixed(1)}%)</div>${spark(b.samples)}` : ""}
+    ${e.correctness ? `<div class="section">Correctness (${e.correctness.passed ? "passed" : "failed"} · exit ${e.correctness.exit_code} · ${e.correctness.duration_s.toFixed(1)}s)</div><pre>${esc(e.correctness.output_tail.split("\n").slice(-14).join("\n"))}</pre>` : ""}
+    ${e.diff ? `<div class="section">Diff (${esc(e.files_changed.join(", "))})</div><pre class="diff">${diffHtml(e.diff)}</pre>` : e.edits.length ? `<div class="section">Proposed edits (not applied)</div><pre>${esc(e.edits.map(x => `--- ${x.file}\n- ${x.search}\n+ ${x.replace}`).join("\n\n"))}</pre>` : ""}
+    <div class="section">Log</div><pre>${esc(e.logs.join("\n"))}</pre>`;
+}
+
+function diffHtml(d) {
+  return d.split("\n").map(l => { const c = l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff") || l.startsWith("index") ? "meta" : l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : l.startsWith("@@") ? "hunk" : ""; return `<span class="${c}">${esc(l)}</span>`; }).join("\n");
+}
+
+function spark(samples) {
+  if (!samples || samples.length < 2) return "";
+  const w = 300, h = 36, mn = Math.min(...samples), mx = Math.max(...samples), r = (mx - mn) || 1;
+  const pts = samples.map((s, i) => `${(i / (samples.length - 1) * (w - 4) + 2).toFixed(1)},${(h - 4 - (s - mn) / r * (h - 8)).toFixed(1)}`).join(" ");
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline fill="none" stroke="var(--wait)" stroke-width="1.5" points="${pts}"/></svg>`;
+}
+
+poll();
+</script>
+</body>
+</html>
