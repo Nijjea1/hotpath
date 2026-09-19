@@ -99,9 +99,12 @@ def finished(tmp_path_factory):
 
 def _bare(tmp_path: Path, repo: Path, name: str, base: str) -> Path:
     bare = tmp_path / f"{name}.git"
-    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(tmp_path, "-c", "init.defaultBranch=unused-test-branch", "init", "-q", "--bare", str(bare))
     git(repo, "remote", "add", name, str(bare))
     git(repo, "push", "-q", name, f"{base}:refs/heads/{base}")
+    # A bare repo's HEAD follows init.defaultBranch, which may differ from the
+    # run's base branch. Point it at the pushed branch so clones have a parent.
+    git(bare, "symbolic-ref", "HEAD", f"refs/heads/{base}")
     return bare
 
 
@@ -169,6 +172,7 @@ def test_refuses_when_the_base_moved_unless_allowed(finished, tmp_path):
     bare = _bare(tmp_path, ws.target, "moved", run.base_branch)
     clone = tmp_path / "clone"
     git(tmp_path, "clone", "-q", str(bare), str(clone))
+    assert git(clone, "rev-parse", "HEAD") == run.base_commit
     (clone / "README.md").write_text("someone else's change\n")
     git(clone, "add", "README.md")
     git(clone, "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-q", "-m", "move base")
