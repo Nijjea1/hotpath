@@ -1,0 +1,17 @@
+name: demo_repo
+target: ../demo_repo
+test_cmd: python tests/check.py
+bench_cmd: python bench.py
+profile_cmd: python hotprofile.py
+editable: ["*.py"]
+locked: ["tests/*", "bench.py", "hotprofile.py", "data.py"]
+timeouts: {test: 120, bench: 300, profile: 120, model: 120}
+benchmark: {min_speedup: 1.03, noise_multiplier: 2.0, baseline_repeats: 3, bootstrap_samples: 1500}
+search: {iterations: 3, candidates_per_iteration: 3, max_parallel_tests: 2, max_parallel_workers: 4, max_parallel_benchmarks: 1}
+provider:
+  planner: mock
+  worker: mock
+  mock_patches_dir: ../demo_repo/mock_patches
+
+# Trusted bundled demo only; use the Docker config for arbitrary repositories.
+execution: {backend: local}
