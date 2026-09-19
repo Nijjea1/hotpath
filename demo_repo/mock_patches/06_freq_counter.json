@@ -1,0 +1,16 @@
+{
+  "idea": "Count word frequencies with collections.Counter",
+  "strategy": "data structure: use set/dict/deque/Counter instead of list scans",
+  "target_file": "slowlib.py",
+  "rationale": "words.count(w) per unique word is O(unique * n). Counter is one C-speed pass.",
+  "risk": "low",
+  "edits": [
+    {"file": "slowlib.py",
+     "search": "\"\"\"Record processing pipeline. Correct, but written the slow way.\"\"\"\n",
+     "replace": "\"\"\"Record processing pipeline. Correct, but written the slow way.\"\"\"\nfrom collections import Counter\n"},
+    {"file": "slowlib.py",
+     "search": "    freq = {}\n    for w in set(words):\n        freq[w] = words.count(w)\n    return dict(sorted(freq.items()))",
+     "replace": "    return dict(sorted(Counter(words).items()))"
+  }],
+  "reasoning": "Counter counts in one pass in C. Keys and counts are identical to the original; sorting by key is unchanged, so output is bit-identical."
+}
