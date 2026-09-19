@@ -1,0 +1,63 @@
+# Dryft on H100 via Baseten — the competition config.
+#
+# Tomorrow's turnkey checklist (see docs/H100_RUNBOOK.md for the full playbook):
+#   1. Swap the real model in:  targets/torch_transformer/SWAP_DRYFT.md
+#   2. export OPENAI_API_KEY=...            (planner)
+#   3. export BASETEN_API_KEY=...           (workers)  and set provider.worker_base_url below
+#   4. export SENTRY_DSN=...                (optional, for the Sentry track)
+#   5. hotpath run configs/dryft_h100.yaml
+#   6. hotpath export configs/dryft_h100.yaml submission/ --ablate   (PR-ready bundle + numbers)
+#
+# The engine is workload-agnostic: everything Dryft-specific lives in the target's own
+# tests/bench/profile scripts. Mirror Dryft's exact correctness definition in tests/check.py.
+
+name: dryft_h100
+target: ../targets/torch_transformer      # point at Dryft's repo once you have it
+
+test_cmd: python tests/check.py           # MUST mirror Dryft's correctness definition exactly
+bench_cmd: python bench.py                # prints tokens_per_s samples across varied/hidden workloads
+profile_cmd: python hotprofile.py         # torch.profiler summary
+
+# The agent may rewrite the model and any hand-written kernels; it may never touch the
+# correctness test, the benchmark, the profiler, or the frozen reference model.
+editable: ["model.py", "kernels/*.py", "*.py"]
+locked: ["tests/*", "bench.py", "hotprofile.py", "reference*.py"]
+correctness_contract: "For fixed prompts, greedy tokens must exactly match the frozen reference and CUDA logits must pass tests/check.py tolerance. Preserve shapes, ordering, and exceptions."
+
+# Model-written code runs in an isolated container with one GPU. The image is an operator-supplied
+# placeholder: build a reviewed CUDA/PyTorch image on the H100 host first (docs/ISOLATION.md), with
+# the model's dependencies and weights baked in (source staging is capped at 512 MiB).
+execution: {backend: docker, image: "hotpath-runner:h100-reviewed", gpu: "device=0", cpus: 4,
+            memory_mb: 16384, pids_limit: 128, tmpfs_mb: 1024, output_limit_bytes: 1048576}
+
+# H100 is stable and fast: measure more (tighter medians, better noise floor) and re-benchmark the
+# parent next to each candidate so nothing drifts. exclusive keeps a benchmark alone on the GPU.
+timeouts: {test: 900, bench: 1800, profile: 600, model: 240}
+benchmark: {min_speedup: 1.03, noise_multiplier: 2.0, baseline_repeats: 5, exclusive: true, rebenchmark_parent: true}
+
+# Beam search explores more of the tree; on a big model the wins compound (fix one bottleneck, the
+# next appears). Parallel workers are cheap (Baseten); benchmarks stay serialized (1 per GPU).
+search: {iterations: 6, candidates_per_iteration: 4, max_parallel_tests: 1, max_parallel_workers: 6, max_parallel_benchmarks: 1, beam_width: 2, max_patch_retries: 1}
+
+# The proven decode-optimization playbook. The planner picks from these or invents its own; the
+# harness proves every one. High-risk-for-correctness moves (quantization) are flagged so the
+# planner marks them and the correctness gate catches them if they change the output.
+strategies:
+  - "gpu: use torch.nn.functional.scaled_dot_product_attention (flash/mem-efficient) for the attention math — one fused kernel instead of matmul+mask+softmax+matmul"
+  - "gpu: preallocate the KV cache to max length and write new keys/values in place instead of growing it with torch.cat every step"
+  - "gpu: remove CPU-GPU sync points (.item(), .cpu(), .tolist(), print) from the decode loop; keep the next token on device"
+  - "gpu: build the causal mask once (or skip it during single-token decode, where it is a no-op) instead of torch.tril every forward"
+  - "gpu: torch.compile the block/model forward with mode='reduce-overhead' (CUDA graphs) to cut per-token kernel-launch overhead"
+  - "gpu: capture the single-token decode step in a CUDA graph and replay it (needs a static preallocated cache)"
+  - "gpu: fuse LayerNorm/RMSNorm and elementwise ops into one kernel"
+  - "gpu: enable TF32 matmuls if the correctness tolerance allows (flag as medium risk — it changes numerics)"
+  - "gpu: speculative decoding with greedy verification (a small draft model proposes, the big model verifies in one pass) — flag as high risk; must match greedy tokens exactly"
+
+provider:
+  planner: openai
+  planner_model: gpt-4.1                   # big model plans
+  worker: openai                           # OpenAI-compatible; point at Baseten below
+  worker_model: <baseten-model-name>       # e.g. the deployed coding model's served name
+  worker_base_url: https://model-XXXX.api.baseten.co/environments/production/sync/v1
+  worker_api_key_env: BASETEN_API_KEY
+  planner_api_key_env: OPENAI_API_KEY
