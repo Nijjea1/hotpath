@@ -37,6 +37,9 @@ from hotpath.workspace import Workspace, path_allowed
 
 BRANCH_PREFIX = "hotpath/"
 BODY_MARKER = "<!-- hotpath:run={run_id} -->"
+#: Marks the commit `hotpath go` makes before a run: it adds the config, the benchmark, and the CI check.
+#: A run measured on top of such a commit publishes it as the PR's first commit.
+SETUP_TRAILER = "Hotpath-Setup: 1"
 
 
 class PRError(RuntimeError):
@@ -100,6 +103,22 @@ def remote_default_branch(repo: Path, remote: str) -> Optional[str]:
 # --------------------------------------------------------------------------- #
 # Messages
 # --------------------------------------------------------------------------- #
+
+def setup_commit_parent(repo: Path, commit: str) -> Optional[str]:
+    """The parent of `commit` when `commit` is a `hotpath go` setup commit, else None."""
+    message = _git_ok(["log", "-1", "--format=%B", commit], repo) or ""
+    if SETUP_TRAILER not in message.splitlines():
+        return None
+    return _git_ok(["rev-parse", f"{commit}^"], repo)
+
+
+def setup_section(repo: Path, commit: str) -> str:
+    files = [f for f in (_git_ok(["diff-tree", "--no-commit-id", "--name-only", "-r", commit], repo) or "").splitlines() if f]
+    listed = "\n".join(f"- `{f}`" for f in files)
+    return ("\n\n### Setup commit\n\nThe first commit adds what this run measured against, so a reviewer can "
+            f"check what \"correct\" and \"faster\" meant and rerun it:\n\n{listed}\n\n"
+            "Hotpath may never edit these files; the `hotpath-verify` check fails any later commit that does.\n")
+
 
 def _metric(run: RunState) -> str:
     return run.baseline_benchmark.metric if run.baseline_benchmark else "seconds"
@@ -363,7 +382,11 @@ def publish(cfg: HotpathConfig, store: Store, run: RunState, ws: Workspace, *, b
     """Build the branch, push it, and open or refresh the PR. Records the outcome on the run."""
     plan = build_branch(cfg, store, run, ws, pruned, ablation_md, remote)
     repo = ws.target
+    setup_parent = setup_commit_parent(repo, run.base_commit)
     say(f"built {plan.branch}: {len(plan.commits)} commit(s), {plan.speedup:.3f}x")
+    if setup_parent:
+        plan.body += setup_section(repo, run.base_commit)
+        say(f"  {run.base_commit[:8]} (setup: Hotpath config, benchmark, and CI check)")
     for sha, subject in plan.commits:
         say(f"  {sha[:8]} {subject}")
     body_file = ws.workdir / "prs" / f"{run.id}.md"
@@ -397,7 +420,9 @@ def publish(cfg: HotpathConfig, store: Store, run: RunState, ws: Workspace, *, b
     if tip is None:
         raise PRError(f"{remote}/{record.base} does not exist. Push the branch the run measured first "
                       f"(git push {remote} {record.base}), then publish again.")
-    if tip != run.base_commit and not allow_moved_base:
+    if tip != run.base_commit and tip == setup_parent:
+        say(f"{remote}/{record.base} is the parent of the setup commit; the PR carries both")
+    elif tip != run.base_commit and not allow_moved_base:
         raise PRError(
             f"{remote}/{record.base} is at {tip[:8]}, but this run measured {run.base_commit[:8]}. "
             "The speedup and tests describe the old base, not the merge. Push the measured commit, re-run "

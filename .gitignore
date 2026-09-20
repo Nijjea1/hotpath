@@ -15,3 +15,6 @@ demo_repo/.hotpath/
 demo_repo/.git/
 targets/*/.hotpath/
 targets/*/.git/
+
+# `hotpath go` clones and per-repo environments
+workspaces/

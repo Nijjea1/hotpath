@@ -1,0 +1,16 @@
+{
+  "idea": "Count words in one pass with collections.Counter",
+  "strategy": "data structure: use set/dict/deque/Counter instead of list scans",
+  "target_file": "textstats/core.py",
+  "rationale": "words.count(word) per distinct word is O(unique * n). Counter counts everything in one pass, in first-seen order.",
+  "risk": "low",
+  "edits": [
+    {"file": "textstats/core.py",
+     "search": "\"\"\"Text statistics. Correct, but written the slow way.\"\"\"\n",
+     "replace": "\"\"\"Text statistics. Correct, but written the slow way.\"\"\"\nfrom collections import Counter\n"},
+    {"file": "textstats/core.py",
+     "search": "    freq = {}\n    for word in unique_words(words):\n        freq[word] = words.count(word)\n    return freq",
+     "replace": "    return dict(Counter(words))"}
+  ],
+  "reasoning": "Counter is a dict subclass that preserves first-seen order, so keys, counts, and order are identical."
+}

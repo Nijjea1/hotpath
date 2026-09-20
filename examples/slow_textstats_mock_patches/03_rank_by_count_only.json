@@ -1,0 +1,13 @@
+{
+  "idea": "Rank by count only, skipping the alphabetical tie-break",
+  "strategy": "algorithm: avoid redundant work",
+  "target_file": "textstats/core.py",
+  "rationale": "Sorting on a single key is cheaper.",
+  "risk": "medium",
+  "edits": [
+    {"file": "textstats/core.py",
+     "search": "    ranked = sorted(freq.items(), key=lambda kv: (-kv[1], kv[0]))",
+     "replace": "    ranked = sorted(freq.items(), key=lambda kv: -kv[1])"}
+  ],
+  "reasoning": "Looks faster, but changes which words win ties. The tests should reject it."
+}

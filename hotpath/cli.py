@@ -1,4 +1,4 @@
-"""hotpath init | run [--pr] | pr | serve | ablate | export. The config defaults to the nearest .hotpath.yaml."""
+"""hotpath go | assess | init | run [--pr] | pr | serve | ablate | export. The config defaults to the nearest .hotpath.yaml."""
 from __future__ import annotations
 
 import argparse
@@ -132,6 +132,30 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_go(args: argparse.Namespace) -> int:
+    from hotpath.go import Go, GoOptions
+
+    opts = GoOptions(target=args.target, yes=args.yes, provider=args.provider, mock_patches=args.mock_patches,
+                     iterations=args.iterations, candidates=args.candidates, beam=args.beam,
+                     max_tokens=args.max_tokens, max_minutes=args.max_minutes, sandbox=args.sandbox,
+                     test_cmd=args.test_cmd, bench_cmd=args.bench_cmd, no_generate=args.no_generate,
+                     test_runs=args.test_runs, test_timeout=args.test_timeout, no_pr=args.no_pr,
+                     pr_method=args.pr_method, ready=args.ready, open_browser=not args.no_open,
+                     dashboard=args.dashboard, port=args.port, workspaces=args.workspaces, remote=args.remote,
+                     resume=args.resume)
+    return Go(opts).run()
+
+
+def cmd_assess(args: argparse.Namespace) -> int:
+    import json
+
+    from hotpath.assess import assess
+
+    a = assess(Path(args.path))
+    print(json.dumps(a.to_dict(), indent=2) if args.json else a.to_markdown())
+    return 0 if a.ok else 1
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
     from server.app import create_app
@@ -236,6 +260,40 @@ def main(argv: list[str] | None = None) -> int:
                         help="how to open the PR: gh CLI, GITHUB_TOKEN, or a pre-filled link (auto tries them in order)")
         sp.add_argument("--allow-moved-base", action="store_true",
                         help="publish even though the base branch moved since the run measured it")
+
+    g = sub.add_parser("go", help="one command: assess a repo, build and test it, find a benchmark, optimize, "
+                                  "and open a draft PR")
+    g.add_argument("target", help="GitHub URL, owner/repo, any git URL, or a local checkout")
+    g.add_argument("-y", "--yes", action="store_true",
+                   help="accept every default: local execution consent, the benchmark, and pushing the PR branch")
+    g.add_argument("--provider", choices=["openai", "mock"], help="model provider (default: openai; mock is offline)")
+    g.add_argument("--mock-patches", help="recorded patches for --provider mock")
+    g.add_argument("--iterations", type=int, default=3)
+    g.add_argument("--candidates", type=int, default=3, help="candidates per iteration")
+    g.add_argument("--beam", type=int, default=1)
+    g.add_argument("--max-tokens", type=int, help="stop the search once model calls have used this many tokens")
+    g.add_argument("--max-minutes", type=float, help="stop the search after this many minutes")
+    g.add_argument("--sandbox", choices=["auto", "local", "docker"], default="auto",
+                   help="where the target's code runs (auto: Docker if it is running, else local with consent)")
+    g.add_argument("--test-cmd", help="override the detected correctness check")
+    g.add_argument("--bench-cmd", help="use this benchmark (prints Hotpath JSON) instead of finding or generating one")
+    g.add_argument("--no-generate", action="store_true", help="never ask a model to write a benchmark")
+    g.add_argument("--test-runs", type=int, default=3, help="baseline test runs used to detect flaky tests")
+    g.add_argument("--test-timeout", type=float, default=900.0, help="seconds per test-suite run")
+    g.add_argument("--no-pr", action="store_true", help="build the PR branch locally but do not push")
+    g.add_argument("--pr-method", choices=["auto", "gh", "token", "link"], default="auto")
+    g.add_argument("--ready", action="store_true", help="open the PR ready for review instead of as a draft")
+    g.add_argument("--no-open", action="store_true", help="do not open the PR or dashboard in a browser")
+    g.add_argument("--dashboard", action="store_true", help="serve the live dashboard during the search")
+    g.add_argument("--port", type=int, default=8765)
+    g.add_argument("--workspaces", help="where clones and per-repo environments live (default: ./workspaces)")
+    g.add_argument("--remote", default="origin")
+    g.add_argument("--resume", action="store_true", help="continue the last `go` run on this repository")
+    g.set_defaults(fn=cmd_go)
+    s0 = sub.add_parser("assess", help="read-only report: ecosystem, tests, benchmark, editable and locked files")
+    s0.add_argument("path", nargs="?", default=".")
+    s0.add_argument("--json", action="store_true")
+    s0.set_defaults(fn=cmd_assess)
 
     r = sub.add_parser("run", help="run the optimization loop once")
     r.add_argument("config", nargs="?", help="config file (default: the nearest .hotpath.yaml)")
