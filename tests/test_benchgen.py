@@ -33,6 +33,14 @@ def repo(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def steady(monkeypatch):
+    """Pin the timing gates so these tests exercise the check they name, not the machine's load.
+    `test_a_too_fast_workload_is_rejected_with_a_scaling_hint` covers the duration gate itself."""
+    monkeypatch.setattr(benchgen, "MAX_NOISE", 1.0)
+    monkeypatch.setattr(benchgen, "MAX_RUN_DISAGREEMENT", 1.0)
+
+
+@pytest.fixture
 def runner():
     env = {"PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", ""), "PYTHONHASHSEED": "0"}
     return make_runner(TargetEnv("venv", sys.executable, env))
@@ -54,7 +62,7 @@ def test_robust_noise_ignores_one_outlier():
     assert benchgen.robust_noise([1.0, 1.01, 0.99, 1.0, 5.0]) < 0.02
 
 
-def test_a_good_workload_validates(repo, runner):
+def test_a_good_workload_validates(repo, runner, steady):
     _write(repo, GOOD)
     v = benchgen.validate(repo, runner)
     assert v.ok, v.reason
@@ -68,14 +76,14 @@ def test_a_too_fast_workload_is_rejected_with_a_scaling_hint(repo, runner):
     assert not v.ok and "larger" in v.reason
 
 
-def test_a_nondeterministic_workload_is_rejected(repo, runner):
+def test_a_nondeterministic_workload_is_rejected(repo, runner, steady):
     code = GOOD.replace("random.Random(0)", "random.Random()")
     _write(repo, code)
     v = benchgen.validate(repo, runner, check_share=False)
     assert not v.ok and "different results" in v.reason
 
 
-def test_generation_feeds_failures_back_until_one_validates(repo, runner):
+def test_generation_feeds_failures_back_until_one_validates(repo, runner, steady):
     replies = iter([USES_TESTS, TOO_FAST, GOOD])
     seen_prompts = []
 

@@ -40,6 +40,7 @@ MIN_MEDIAN_S = 0.005        # below this, timer resolution and interpreter jitte
 MAX_MEDIAN_S = 5.0          # above this, a search iteration becomes too slow to be useful
 MAX_NOISE = 0.12            # robust coefficient of variation (MAD / median) within one run
 NOISY_BUT_USABLE = 0.25     # above the bar, but still better than timing the whole test suite
+MAX_RUN_DISAGREEMENT = 0.25  # how far the medians of two separate runs may differ
 MIN_OWN_SHARE = 0.5         # fraction of profiled time spent in the project's own code
 FORBIDDEN_IMPORTS = ("tests", "test", "conftest", "unittest.mock", "mock", "pytest", "hypothesis")
 
@@ -307,7 +308,7 @@ def validate(worktree: Path, runner: Runner, *, timeout: float = 300, check_shar
         return Validation(False, f"timings vary by {noise:.0%} between trials, too noisy to detect a small speedup. "
                                  f"One call currently takes {median * 1000:.0f} ms. {direction}, and keep I/O, "
                                  "caching between calls, and data building out of workload()", median, noise)
-    if abs(medians[0] - medians[1]) / median > 0.25:
+    if abs(medians[0] - medians[1]) / median > MAX_RUN_DISAGREEMENT:
         return Validation(False, "two runs disagreed by more than 25%; the workload's cost depends on state "
                                  "from earlier calls", median, noise)
     if check_share:
