@@ -122,3 +122,15 @@ def test_benchwrap_times_a_command(capsys):
 def test_benchwrap_refuses_to_time_a_failing_command():
     with pytest.raises(SystemExit, match="exited 3"):
         benchwrap_main(["--trials", "2", "--", sys.executable, "-c", "raise SystemExit(3)"])
+
+
+def test_rejection_is_summarised_without_hiding_the_exception():
+    """The operator line used to be the reason's first line only, so a crash printed
+    "the benchmark crashed:" and nothing else. The model still gets the reason in full."""
+    from hotpath.benchgen import _one_line
+
+    crash = "the benchmark crashed:\nTraceback (most recent call last):\n  File \"x\", line 1\nMemoryError"
+    assert _one_line(crash) == "the benchmark crashed: MemoryError"
+    assert _one_line("one line only") == "one line only"
+    assert _one_line("   \n  \n") == "no reason given"
+    assert len(_one_line("head:\n" + "x" * 500)) == 200

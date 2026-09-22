@@ -268,6 +268,19 @@ def robust_noise(samples: list[float]) -> float:
     return 1.4826 * mad / med if med > 0 else float("inf")
 
 
+def _one_line(reason: str) -> str:
+    """One readable line for the operator. The model always receives `reason` in full.
+
+    A crash reason is a headline plus a traceback, and printing only its first line said
+    "the benchmark crashed:" and nothing else — true, and useless to the person watching. The
+    last line of a traceback is the exception, which is the part worth seeing."""
+    lines = [line.strip() for line in reason.splitlines() if line.strip()]
+    if not lines:
+        return "no reason given"
+    summary = lines[0] if len(lines) == 1 else f"{lines[0]} {lines[-1]}"
+    return summary if len(summary) <= 200 else summary[:197] + "..."
+
+
 def bench_files(workload_code: str, trials: int = 15) -> dict[str, str]:
     return {WORKLOAD_FILE: workload_code.rstrip() + "\n",
             BENCH_FILE: BENCH_TEMPLATE.format(trials=trials),
@@ -398,7 +411,7 @@ def generate_benchmark(worktree: Path, runner: Runner, generator: Callable[[list
                 noisy_best = BenchChoice("generated", f"python {BENCH_FILE}", f"python {PROFILE_FILE}", files,
                                          resp.description + f" (noisy: +/-{v.noise:.0%})", v, list(feedback))
         feedback.append(v.reason)
-        say(f"attempt {i}: rejected ({v.reason.splitlines()[0]})")
+        say(f"attempt {i}: rejected ({_one_line(v.reason)})")
     if noisy_best is not None:
         for rel, text in noisy_best.files.items():
             (worktree / rel).write_text(text, encoding="utf-8", newline="\n")
