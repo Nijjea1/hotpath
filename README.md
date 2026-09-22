@@ -53,6 +53,26 @@ the metric climbing, and a red node for every rejected candidate with the reason
 When *nothing* was accepted it stays up too — "11 tried, 4 broke correctness, 7 inside the noise band"
 is a result, and it is written down there.
 
+### It has done this to a repository nobody here wrote
+
+**[Nijjea1/inflect#1](https://github.com/Nijjea1/inflect/pull/1)** — a draft pull request Hotpath
+opened from a bare GitHub URL in **5 minutes 3 seconds**, with no human step in between.
+
+| | |
+| --- | --- |
+| Correctness | `python -m pytest -q` — 214 tests, 3/3 baseline runs green, not flaky |
+| Benchmark | **written by Hotpath**, over the hot paths its profiler found, declared `(noisy: +/-13%)` |
+| Result | 8 candidates, **2 accepted, 1.472x vs baseline**, 283,112 tokens |
+
+The accepted change measured **1.409x, 95% CI [1.31, 1.45]**. The benchmark's own 13% noise
+*raised* the bar to roughly 26% instead of lowering the standard, and the change cleared it.
+
+The same tooling refused three other repositories, which is the point: one whose property tests
+carry a 200 ms deadline (a correctness suite that fails under load cannot define "correct" for a
+timing experiment), and one where the only available benchmark was the whole test suite, so the
+bar rose to 16% and seven candidates were reported as rejected rather than shipped. Every run is
+written down in [`docs/EVIDENCE_LEDGER.md`](docs/EVIDENCE_LEDGER.md), refusals included.
+
 If the repository has no benchmark, Hotpath profiles its test suite, has a model write one over the
 hottest functions, and **validates it by running it** before trusting it — then shows it to you for
 approval and commits it, so the pull request says exactly what "faster" meant. Full details, including

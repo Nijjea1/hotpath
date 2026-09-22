@@ -105,8 +105,13 @@ All three are covered by the existing suite (still 39/39) plus live re-runs.
 
 ## ⏳ Still unverified (needs your keys/assets)
 
-- **Sentry** — no DSN set; spans/logs code path not exercised live.
-- **Baseten worker endpoint** — `worker_base_url` path not exercised.
+- ~~**Sentry**~~ — verified live; see the note above and `docs/SENTRY.md`. Project-side visibility
+  is the one link still needing a human check.
+- ~~**Baseten worker endpoint**~~ — **verified live on 2026-09-22.** `worker_base_url` pointed at
+  `https://inference.baseten.co/v1` with `moonshotai/Kimi-K2.7-Code`, which wrote every patch in
+  the `inflect` run, including the two accepted changes that shipped as
+  https://github.com/Nijjea1/inflect/pull/1 (1.472x). Worker quality on a GPU target is still
+  untested; this is a CPU-target result.
 - **Real Dryft model swap** — replace `model.py` + `reference_model.py`, keep their `check.py`
   correctness definition. This is the headline number.
 
