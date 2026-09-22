@@ -125,6 +125,43 @@ which are small, LF, and purpose-built. Both made `hotpath go` unusable on ordin
   Every file Hotpath rewrote then looked modified, and `ensure_repo` refused the repository.
 - **A 14,000-character source budget**, smaller than one ordinary module.
 
+## What the target's own CI said (2026-09-22)
+
+The first pull request Hotpath opened, `Nijjea1/inflect#1`, **failed every CI job on every
+platform and Python version**. One cause, and it was ours:
+
+    ERROR collecting hotpath_bench.py
+    E   ModuleNotFoundError: No module named 'hotpath'
+
+The benchmark files Hotpath commits imported `hotpath.benchlib` and ran at module level. Our own
+venv has that package; the repository's CI does not, and inflect collects doctests, so it imported
+every module at the root and the suite died at collection. **The pull request made someone else's
+repository depend on our tool.** Both templates are now self-contained stdlib-only scripts behind
+`if __name__ == "__main__"`, with a test that runs them with `PYTHONPATH` stripped and asserts that
+importing them produces no output.
+
+The replacement, `Nijjea1/inflect#2` (1.45x), reads:
+
+| | Count |
+| --- | ---: |
+| passed | 6 |
+| already failing on the base | 6 |
+| no base result to compare | 22 |
+| **introduced by this pull request** | **0** |
+
+Independently confirmed: `jaraco/inflect`'s own CI is red at base commit `262a247d` — `check`,
+`collateral (diffcov)` and `test (3.10, macos-latest)` all fail upstream, with several jobs
+cancelled. The remaining red on the pull request is ruff lint that fails on upstream `main` too.
+
+**A caution about that table.** 22 checks are `unknown`, not green. Hotpath compares against the
+base commit and refuses to attribute a failure it cannot compare; a fork's default branch has no CI
+history, so it falls back to the upstream repository, and jobs upstream never ran for that commit
+stay unknown. "0 introduced" means *no failure was shown to be ours*, not that all 34 checks pass.
+
+**Not yet demonstrated:** the repair loop has never fired on a real `introduced` failure. Its
+control flow is tested — a fix the harness rejects is never pushed, the attempt budget bounds it,
+CI is re-read rather than assumed — but no live pull request has been repaired by it.
+
 ## Release evidence still required
 
 1. **Done locally:** Ten clean `slow_web_analytics` runs had the same shipped
