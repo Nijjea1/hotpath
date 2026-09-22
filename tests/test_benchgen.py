@@ -134,3 +134,32 @@ def test_rejection_is_summarised_without_hiding_the_exception():
     assert _one_line("one line only") == "one line only"
     assert _one_line("   \n  \n") == "no reason given"
     assert len(_one_line("head:\n" + "x" * 500)) == 200
+
+
+def test_generated_files_need_nothing_from_hotpath(tmp_path):
+    """These files are committed to someone else's repository, so they must run without Hotpath
+    installed, and importing them must not run anything.
+
+    Both were violated live: `hotpath_bench.py` imported `hotpath.benchlib` and called it at module
+    level, so inflect's CI — which collects doctests, importing every module at the root — failed
+    every job on every platform with `ModuleNotFoundError: No module named 'hotpath'`. The local run
+    passed because Hotpath's own venv had it."""
+    import subprocess
+    from hotpath.benchgen import bench_files
+
+    for rel, text in bench_files("def workload():\n    return sum(i * i for i in range(20000))\n",
+                                 trials=3).items():
+        (tmp_path / rel).write_text(text, encoding="utf-8")
+    for rel, text in bench_files("x", 3).items():
+        assert "hotpath." not in text.replace("hotpath_", ""), f"{rel} still imports the hotpath package"
+
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    for script, key in (("hotpath_bench.py", "hotpath_benchmark"), ("hotpath_profile.py", "hotpath_profile")):
+        r = subprocess.run([sys.executable, script], cwd=tmp_path, capture_output=True, text=True, env=env)
+        assert r.returncode == 0, f"{script} failed without hotpath installed:\n{r.stderr[-800:]}"
+        assert key in r.stdout, f"{script} printed no {key} payload"
+
+    imported = subprocess.run([sys.executable, "-c", "import hotpath_bench, hotpath_profile"],
+                              cwd=tmp_path, capture_output=True, text=True, env=env)
+    assert imported.returncode == 0, f"importing them failed:\n{imported.stderr[-800:]}"
+    assert imported.stdout == "", "importing them ran the benchmark; guard main() behind __main__"

@@ -47,37 +47,113 @@ FORBIDDEN_IMPORTS = ("tests", "test", "conftest", "unittest.mock", "mock", "pyte
 BENCH_TEMPLATE = '''\
 """Benchmark for Hotpath: times `workload()` from hotpath_workload.py.
 
-Locked. Hotpath runs this file but can never edit it; the pull request that adds it shows exactly what
-"faster" means for this repository.
+Self-contained on purpose. This file is committed to *your* repository, so running it must not
+require Hotpath to be installed, and importing it must not run anything: a test suite that
+collects doctests imports every module it finds at the repository root.
+
+Locked. Hotpath runs this file but can never edit it; the pull request that adds it shows exactly
+what "faster" means for this repository.
+
+    python hotpath_bench.py   ->   {{"hotpath_benchmark": 1, "metric": "seconds", "samples": [...]}}
 """
+import gc
+import json
 import os
+import random
 import sys
+import time
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-for path in (os.path.join(HERE, "src"), HERE):
-    if os.path.isdir(path) and path not in sys.path:
-        sys.path.insert(0, path)
+WARMUP = 2
+TRIALS = {trials}
 
-from hotpath.benchlib import run  # noqa: E402
-from hotpath_workload import workload  # noqa: E402
 
-run(workload, warmup=2, trials={trials})
+def main():
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (os.path.join(here, "src"), here):
+        if os.path.isdir(path) and path not in sys.path:
+            sys.path.insert(0, path)
+    from hotpath_workload import workload
+
+    random.seed(0)
+    try:
+        import numpy as np
+        np.random.seed(0)
+    except Exception:
+        pass
+    for _ in range(WARMUP):
+        workload()
+
+    samples = []
+    for _ in range(TRIALS):
+        gc.collect()
+        gc.disable()
+        try:
+            t0 = time.perf_counter()
+            workload()
+            samples.append(time.perf_counter() - t0)
+        finally:
+            gc.enable()
+    print(json.dumps({{"hotpath_benchmark": 1, "metric": "seconds",
+                      "higher_is_better": False, "samples": samples}}), flush=True)
+
+
+if __name__ == "__main__":
+    main()
 '''
 
 PROFILE_TEMPLATE = '''\
-"""Profile of the benchmark workload, for Hotpath's planner. Locked."""
+"""Profile of the benchmark workload, for Hotpath's planner.
+
+Self-contained and import-safe, for the same reasons as hotpath_bench.py. Locked.
+"""
+import cProfile
+import json
 import os
+import pstats
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-for path in (os.path.join(HERE, "src"), HERE):
-    if os.path.isdir(path) and path not in sys.path:
-        sys.path.insert(0, path)
+TOP = 30
+REPEAT = 2
 
-from hotpath.profilelib import run  # noqa: E402
-from hotpath_workload import workload  # noqa: E402
 
-run(workload, top=30, repeat=2)
+def main():
+    root = os.path.abspath(os.getcwd())
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (os.path.join(here, "src"), here):
+        if os.path.isdir(path) and path not in sys.path:
+            sys.path.insert(0, path)
+    from hotpath_workload import workload
+
+    pr = cProfile.Profile()
+    pr.enable()
+    for _ in range(REPEAT):
+        workload()
+    pr.disable()
+    st = pstats.Stats(pr)
+    total = st.total_tt or 1e-12
+    rows = []
+    for (file, line, func), (_cc, nc, tt, ct, _callers) in st.stats.items():
+        if os.path.isabs(file):
+            af = os.path.abspath(file)
+            if not af.startswith(root + os.sep):
+                continue          # library code outside this repository is not actionable
+            rel = os.path.relpath(af, root)
+        elif file == "~":
+            rel = ""              # C builtin: shown so the planner sees the time, but not editable
+        else:
+            continue              # frozen / stdlib
+        rows.append({"function": func, "file": rel, "line": line, "self_time": tt / REPEAT,
+                     "total_time": ct / REPEAT, "pct": 100.0 * tt / total, "calls": nc})
+    rows.sort(key=lambda r: r["self_time"], reverse=True)
+    print(json.dumps({"hotpath_profile": 1, "tool": "cProfile", "total_time": total / REPEAT,
+                      "n_functions_total": len(rows), "completeness_known": True,
+                      "flamegraph_unavailable_reason":
+                          "cProfile stores aggregated caller edges, not observed call stacks",
+                      "hotspots": rows[:TOP]}), flush=True)
+
+
+if __name__ == "__main__":
+    main()
 '''
 
 DIGEST_FILE = "_hotpath_digest.py"
