@@ -693,6 +693,7 @@ class Go:
             cfg.timeouts.test = max(120.0, min(self.o.test_timeout, self.test_seconds * 8))
         if self.bench_seconds:
             cfg.timeouts.bench = max(300.0, self.bench_seconds * 8)
+        cfg.context.max_source_chars = self._source_budget(cfg.context.max_source_chars)
         cfg.search.iterations = self.o.iterations
         cfg.search.candidates_per_iteration = self.o.candidates
         cfg.search.beam_width = self.o.beam
@@ -732,6 +733,39 @@ class Go:
                 else:
                     os.environ[k] = v
         self._finish_optimize(i, run, orch.store, orch.ws, cfg)
+
+    #: A worker prompt carrying more than this is not worth its cost; a module that large wants
+    #: splitting before it wants optimising.
+    MAX_SOURCE_CHARS = 240_000
+
+    def _source_budget(self, configured: int) -> int:
+        """Size the worker's view of the source to this repository.
+
+        `context.read_target_file` refuses a file bigger than the budget rather than showing the
+        worker a prefix, which is right: a worker writing search/replace text against a truncated
+        file invents the rest. But the 14,000-character default is smaller than one ordinary
+        module — `inflect/__init__.py` is 280,000 — and every candidate then fails before a model
+        is even called. Timeouts are already fitted to the repository here; so is this.
+        """
+        assert self.repo is not None and self.a is not None
+        sizes: dict[str, int] = {}
+        for pattern in self.a.editable:
+            for path in self.repo.glob(pattern):
+                if path.is_file() and not path.is_symlink():
+                    sizes[path.relative_to(self.repo).as_posix()] = path.stat().st_size
+        if not sizes:
+            return configured
+        oversize = {rel: n for rel, n in sizes.items() if n > self.MAX_SOURCE_CHARS}
+        fits = [n for rel, n in sizes.items() if rel not in oversize]
+        budget = max(configured, (max(fits) if fits else 0) + 2_000)
+        budget = min(budget, self.MAX_SOURCE_CHARS)
+        if budget > configured:
+            self.info(f"worker source budget raised to {budget:,} characters to fit this repository's "
+                      f"largest editable file")
+        for rel, n in sorted(oversize.items(), key=lambda kv: -kv[1])[:3]:
+            self.info(f"note: {rel} is {n:,} characters and will not be offered to a worker; "
+                      f"candidates touching it fail with a budget error")
+        return budget
 
     async def _execute_with_budget(self, orch):
         task = asyncio.create_task(orch.execute())

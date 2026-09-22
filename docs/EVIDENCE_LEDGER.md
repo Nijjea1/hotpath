@@ -44,6 +44,34 @@ Hotpath never reached a benchmark on that target, so there is **no textdistance 
 report** — only the refusals above. What a target needs is now explicit: a correctness check
 that is deterministic and independent of how busy the machine is.
 
+### `mahmoud/boltons` — all eight stages, and an honest non-result
+
+The first complete `hotpath go` against a repository nobody here wrote. Base commit `961dcff3`,
+OpenAI `gpt-4.1` planning, Baseten `moonshotai/Kimi-K2.7-Code` writing patches, local execution,
+48,291 tokens, ~8 minutes of search.
+
+- Baseline: **519 tests, 3/3 runs green, not flaky, 7.0 s each.**
+- Benchmark: **generation failed** (three attempts; the last rejected because only 28% of the
+  profiled time was inside boltons' own code), so it fell back to timing the whole test suite —
+  5.3 s median at **8.1% noise**, which puts the acceptance bar near 16% of total suite runtime.
+- Outcome: **7 candidates, 0 accepted — 2 rejected on correctness, 5 on speed. No pull request**,
+  because nothing was proved.
+
+| Verdict | Measured | Hypothesis |
+| --- | --- | --- |
+| `rejected_correctness` | — | cache the computed length in `IndexedSet.__len__` |
+| `rejected_speed` | 0.998x, 95% CI [0.97, 1.07] | avoid redundant index translation in `pop` |
+| `rejected_speed` | 1.023x, 95% CI [0.99, 1.03] | inline `_translate_index` |
+| `rejected_speed` | 1.046x, 95% CI [0.99, 1.07] | slice assignment in `_balance_list` |
+
+The last row is the whole argument in one line: a change that *looks* 4.6% faster, whose interval
+still contains 1.0, and which is therefore not kept. A coarse benchmark did not become a
+permissive one — it raised the bar and Hotpath reported nothing rather than something.
+
+**This run is not evidence that boltons cannot be made faster.** It is evidence that no proposed
+change cleared a 16% bar on whole-suite runtime. A generated workload over one hot function would
+measure a real win that this benchmark cannot see.
+
 ## Release evidence still required
 
 1. **Done locally:** Ten clean `slow_web_analytics` runs had the same shipped

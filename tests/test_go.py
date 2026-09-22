@@ -278,3 +278,45 @@ def test_dashboard_is_killed_when_a_stage_fails(tmp_path):
     g.dashboard_proc = FakeServer()
     g._cleanup()
     assert g.dashboard_proc.terminated and not g.dashboard_proc.waited
+
+
+def test_source_budget_fits_the_repository_largest_editable_file(tmp_path, monkeypatch):
+    """The 14,000-character default is smaller than one ordinary module, and `read_target_file`
+    refuses an oversize file before calling a model — so every candidate failed on a repository
+    like `inflect`, whose package is a single 280,000-character file."""
+    from hotpath.assess import assess
+
+    repo = tmp_path / "repo"
+    (repo / "pkg").mkdir(parents=True)
+    (repo / "pkg" / "__init__.py").write_text("# " + "x" * 60_000 + "\n")
+    (repo / "pkg" / "small.py").write_text("y = 1\n")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_a.py").write_text("def test_a(): pass\n")
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "initial")
+
+    go = Go(opts(tmp_path, str(repo)), out=lambda _s: None, ask=None)
+    go.repo, go.a = repo, assess(repo)
+    budget = go._source_budget(14_000)
+    assert budget > 60_000, "the budget should fit the largest editable file"
+    assert budget <= Go.MAX_SOURCE_CHARS
+
+
+def test_source_budget_reports_a_file_no_worker_can_be_shown(tmp_path):
+    from hotpath.assess import assess
+
+    repo = tmp_path / "repo"
+    (repo / "pkg").mkdir(parents=True)
+    (repo / "pkg" / "__init__.py").write_text("# " + "x" * (Go.MAX_SOURCE_CHARS + 5_000) + "\n")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_a.py").write_text("def test_a(): pass\n")
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "initial")
+
+    said: list[str] = []
+    go = Go(opts(tmp_path, str(repo)), out=said.append, ask=None)
+    go.repo, go.a = repo, assess(repo)
+    assert go._source_budget(14_000) == 14_000          # nothing editable fits, so leave it alone
+    assert any("will not be offered to a worker" in line for line in said)
