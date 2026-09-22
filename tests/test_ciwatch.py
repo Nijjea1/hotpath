@@ -166,3 +166,84 @@ def test_a_forks_empty_base_falls_back_to_the_upstream_repository(monkeypatch):
     assert [c.name for c in v.pre_existing] == ["test"], "upstream also fails it: not ours"
     assert not v.introduced
     assert any("them/proj" in line for line in said), "the different source must be stated"
+
+
+# --------------------------------------------------------------------------- #
+# The repair loop in `hotpath go`'s ninth stage.
+#
+# These drive the loop's control flow with the model call, the harness verdict and the push
+# stubbed out. What they pin is the part that must never go wrong: a fix is only kept when the
+# harness accepts it, the loop stops rather than pushing something unverified, and CI is never
+# declared green on anything but a fresh reading.
+
+class _Exp:
+    def __init__(self, status, speedup=None, reason=""):
+        self.status = type("S", (), {"value": status})()
+        self.reject_reason = reason
+        self.comparison = type("C", (), {"speedup_vs_parent": speedup})() if speedup else None
+
+
+def _go(monkeypatch, tmp_path, **attrs):
+    from hotpath.go import Go, GoOptions
+    said = []
+    go = Go(GoOptions(target=str(tmp_path), ci_attempts=2), out=said.append, ask=None)
+    go.state.pr_head_sha, go.state.base_commit, go.state.github = "head", "base", "o/r"
+    go.said = said
+    for k, v in attrs.items():
+        setattr(go, k, v)
+    return go
+
+
+def test_a_fix_the_harness_rejects_is_never_pushed(monkeypatch, tmp_path):
+    pushed = []
+    go = _go(monkeypatch, tmp_path)
+    monkeypatch.setattr(type(go), "_ci_experiment",
+                        lambda self, failure: _Exp("rejected_correctness", reason="tests failed"))
+    monkeypatch.setattr(type(go), "_republish", lambda self: pushed.append(1) or True)
+    gh = Gh(RepoRef("github.com", "o", "r"), binary="gh")
+    monkeypatch.setattr(Gh, "failing_log", lambda self, c, max_chars=4000: "E AssertionError: boom")
+
+    assert go._fix_ci(gh, classify([check("test", "failure")], [check("test")]), 9) is False
+    assert pushed == [], "a fix the harness rejected must never reach the remote"
+    assert any("rejected by the harness" in line for line in go.said)
+
+
+def test_a_verified_fix_is_pushed_and_ci_is_read_again(monkeypatch, tmp_path):
+    go = _go(monkeypatch, tmp_path)
+    monkeypatch.setattr(type(go), "_ci_experiment", lambda self, failure: _Exp("accepted", speedup=1.4))
+    monkeypatch.setattr(type(go), "_republish", lambda self: True)
+    monkeypatch.setattr("hotpath.ciwatch.inspect",
+                        lambda *a, **k: classify([check("test")], [check("test")]))
+    gh = Gh(RepoRef("github.com", "o", "r"), binary="gh")
+    monkeypatch.setattr(Gh, "failing_log", lambda self, c, max_chars=4000: "E AssertionError: boom")
+
+    assert go._fix_ci(gh, classify([check("test", "failure")], [check("test")]), 9) is True
+    assert any("CI green after 1 fix attempt" in line for line in go.said)
+    assert go.state.ci_state == "green"
+
+
+def test_the_loop_gives_up_after_the_attempt_budget(monkeypatch, tmp_path):
+    tries = []
+    go = _go(monkeypatch, tmp_path)
+    monkeypatch.setattr(type(go), "_ci_experiment",
+                        lambda self, failure: tries.append(failure) or _Exp("accepted", speedup=1.4))
+    monkeypatch.setattr(type(go), "_republish", lambda self: True)
+    still_red = classify([check("test", "failure")], [check("test")])
+    monkeypatch.setattr("hotpath.ciwatch.inspect", lambda *a, **k: still_red)
+    gh = Gh(RepoRef("github.com", "o", "r"), binary="gh")
+    monkeypatch.setattr(Gh, "failing_log", lambda self, c, max_chars=4000: "E AssertionError: boom")
+
+    assert go._fix_ci(gh, still_red, 9) is False
+    assert len(tries) == 2, "ci_attempts bounds the loop"
+    assert "AssertionError" in tries[0], "the failing log is what gets fed back"
+
+
+def test_unreadable_logs_stop_the_loop_instead_of_guessing(monkeypatch, tmp_path):
+    called = []
+    go = _go(monkeypatch, tmp_path)
+    monkeypatch.setattr(type(go), "_ci_experiment", lambda self, failure: called.append(1))
+    gh = Gh(RepoRef("github.com", "o", "r"), binary="gh")
+    monkeypatch.setattr(Gh, "failing_log", lambda self, c, max_chars=4000: "")
+
+    assert go._fix_ci(gh, classify([check("test", "failure")], [check("test")]), 9) is False
+    assert called == [], "with no log to feed back, no model call should be made"
