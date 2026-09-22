@@ -284,7 +284,16 @@ def validate(worktree: Path, runner: Runner, *, timeout: float = 300, check_shar
         if res.timed_out:
             return Validation(False, f"the benchmark did not finish within {timeout:.0f}s; use a smaller input")
         if res.returncode != 0:
-            return Validation(False, "the benchmark crashed:\n" + (res.stderr or res.stdout)[-1500:])
+            # A non-zero exit with nothing on either stream means the process was killed rather than
+            # raising — almost always memory. Saying "the benchmark crashed:" and then nothing gives
+            # the model no way to fix it, and burns one of very few attempts.
+            output = (res.stderr or res.stdout).strip()
+            if output:
+                return Validation(False, "the benchmark crashed:\n" + output[-1500:])
+            return Validation(False, f"the benchmark exited with code {res.returncode} and printed nothing, "
+                                     f"which means it was killed rather than raising — usually for using too "
+                                     f"much memory. Build the input smaller, and with a generator or a loop "
+                                     f"rather than one large materialised list.")
         try:
             samples = [float(s) for s in parse_benchmark_output(res.stdout)["samples"]]
         except (BenchmarkParseError, ValueError, TypeError) as e:

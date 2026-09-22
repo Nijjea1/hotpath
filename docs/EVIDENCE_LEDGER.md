@@ -28,6 +28,22 @@ current audit predates that run and says the path was unvalidated. The handoff
 is the newer evidence for that CPU path; neither note proves repeatability of
 the worker on the GPU target.
 
+## `hotpath go` against repositories nobody here wrote (2026-09-22)
+
+The first live exercise of the guided flow outside the bundled fixtures. Each attempt is
+recorded because the refusals are the evidence: the baseline gate stopped three runs that
+would otherwise have produced numbers that meant nothing.
+
+| Target | Where it stopped | What it showed |
+| --- | --- | --- |
+| `life4/textdistance` | Stage 4, `ModuleNotFoundError: hypothesis` | A detection gap, now fixed: test extras declared in `setup.py` were not read. |
+| `life4/textdistance` | Stage 4, `RuntimeError: cannot import` | The suite needs optional comparison libraries; narrowing it with `--test-cmd` is the answer, and the message now says so. |
+| `life4/textdistance` | Stage 4, Hypothesis deadline | **The repository is unsuitable, and that is a finding.** Its property tests carry a 200 ms per-example deadline, so the correctness suite fails under load. A timing-dependent definition of "correct" cannot gate a timing experiment, and Hotpath refused rather than measure against it. |
+
+Hotpath never reached a benchmark on that target, so there is **no textdistance speedup to
+report** — only the refusals above. What a target needs is now explicit: a correctness check
+that is deterministic and independent of how busy the machine is.
+
 ## Release evidence still required
 
 1. **Done locally:** Ten clean `slow_web_analytics` runs had the same shipped
