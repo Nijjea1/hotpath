@@ -1,3 +1,10 @@
+> **Status: historical.** This was the two-person plan for the pre-Sentry/Baseten day
+> (2026-09-18). Its unchecked boxes describe work that has since shipped — retry-with-feedback,
+> beam search, interleaved re-benchmark, `hotpath export`, the second offline target, the
+> bottleneck diff, the metric-aware chart, Sentry, and the Baseten worker are all in `main`.
+> Kept for the reasoning and the ownership seam it records. For what is actually open, read
+> `docs/EVIDENCE_LEDGER.md` and the roadmap at the end of `README.md`.
+
 # Hotpath — Two-Person Work Plan (pre-Sentry/Baseten)
 
 Goal for today: **make everything that does NOT depend on Sentry or Baseten rock solid, tested,

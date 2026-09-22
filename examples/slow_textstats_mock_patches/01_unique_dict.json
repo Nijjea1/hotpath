@@ -1,0 +1,13 @@
+{
+  "idea": "Deduplicate with dict.fromkeys instead of scanning a list",
+  "strategy": "data structure: use set/dict/deque/Counter instead of list scans",
+  "target_file": "textstats/core.py",
+  "rationale": "`word not in seen` scans a growing list: O(n * unique). dict.fromkeys keeps first-seen order in one pass.",
+  "risk": "low",
+  "edits": [
+    {"file": "textstats/core.py",
+     "search": "    seen = []\n    for word in words:\n        if word not in seen:\n            seen.append(word)\n    return seen",
+     "replace": "    return list(dict.fromkeys(words))"}
+  ],
+  "reasoning": "dict preserves insertion order, so the first-seen order is identical."
+}

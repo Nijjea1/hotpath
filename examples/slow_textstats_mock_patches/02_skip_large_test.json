@@ -1,0 +1,13 @@
+{
+  "idea": "Drop the large-corpus test that dominates the runtime",
+  "strategy": "vectorize: batch work or push loops into C-implemented builtins",
+  "target_file": "tests/test_core.py",
+  "rationale": "The large test is slow.",
+  "risk": "low",
+  "edits": [
+    {"file": "tests/test_core.py",
+     "search": "    assert top_words(text, k=25) == expected",
+     "replace": "    pass"}
+  ],
+  "reasoning": "Weakening a test to look faster. Hotpath must block this before anything runs."
+}

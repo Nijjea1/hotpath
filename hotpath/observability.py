@@ -189,8 +189,21 @@ def ai_chat(model: str, agent: str, system: str) -> Iterator[Any]:
         yield sp
 
 
+#: Tokens used by model calls in this process, whether or not Sentry is enabled. `hotpath go` reads it
+#: to enforce a token budget.
+token_usage: dict[str, int] = {"input": 0, "output": 0, "total": 0, "calls": 0}
+
+
 def record_ai_usage(sp: Any, resp: Any) -> None:
     usage = getattr(resp, "usage", None)
+    if usage is not None:
+        try:
+            token_usage["input"] += int(usage.prompt_tokens or 0)
+            token_usage["output"] += int(usage.completion_tokens or 0)
+            token_usage["total"] += int(usage.total_tokens or 0)
+            token_usage["calls"] += 1
+        except (TypeError, ValueError, AttributeError):
+            pass
     try:
         if getattr(resp, "model", None):
             sp.set_data(SPANDATA.GEN_AI_RESPONSE_MODEL, resp.model)

@@ -291,3 +291,42 @@ def test_edits_keep_the_files_line_endings_and_utf8(ws: Workspace, eol: str):
     assert after == source.replace("x + 1", "x + 2  # faster → better").encode("utf-8")
     assert after.count(b"\r\n") == (6 if eol == "\r\n" else 0)
     ws.remove_worktree(wt)
+
+
+def test_crlf_checkout_is_not_reported_as_dirty(tmp_path):
+    """A repository checked out by ordinary git on Windows has CRLF in the working tree and LF in
+    the index, because `core.autocrlf=true` lives in Git for Windows' *system* config. Hotpath's
+    git calls disable the system config, so unless the setting is forwarded they judge every
+    rewritten file modified and `ensure_repo` refuses a repository everyone else calls clean."""
+    from hotpath.workspace import _eol_options, _git
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    plain = lambda *a: subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True, check=True)
+    plain("init", "-q", "-b", "main")
+    plain("config", "user.name", "t")
+    plain("config", "user.email", "t@t")
+    plain("config", "core.autocrlf", "true")           # what Git for Windows sets system-wide
+    (repo / "notes.txt").write_bytes(b"alpha\nbeta\n")  # committed as LF
+    plain("add", "-A")
+    plain("commit", "-q", "-m", "initial")
+    (repo / "notes.txt").unlink()
+    plain("checkout", "--", "notes.txt")                 # re-materialise: working tree becomes CRLF
+    assert (repo / "notes.txt").read_bytes() == b"alpha\r\nbeta\r\n", "precondition: CRLF working tree"
+
+    assert "-c" in _eol_options(str(repo.resolve())), "the autocrlf setting should be forwarded"
+    assert _git(["status", "--porcelain"], repo) == "", "a CRLF checkout is clean, not modified"
+
+
+def test_gitignore_entries_are_not_appended_twice(tmp_path):
+    """Initialising a not-yet-versioned target used to append the whole ignore block unconditionally,
+    so a directory already listing `.hotpath/` and `__pycache__/` ended up listing them twice."""
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "mod.py").write_text("x = 1\n")
+    gitignore = target / ".gitignore"
+    gitignore.write_text(".hotpath/\n__pycache__/\n")
+    Workspace(target, Path(".hotpath")).ensure_repo()
+    lines = [ln for ln in gitignore.read_text().splitlines() if ln.strip()]
+    assert lines.count(".hotpath/") == 1 and lines.count("__pycache__/") == 1
+    assert ".env" in lines and ".env.*" in lines      # what was genuinely missing still gets added

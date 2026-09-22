@@ -1,3 +1,9 @@
+> **Superseded in part (2026-09-22).** `hotpath go` has since been exercised live against four
+> third-party repositories, one of which shipped a pull request at 1.472x
+> (https://github.com/Nijjea1/inflect/pull/1). Five defects that only appear outside the bundled
+> fixtures were found and fixed in the process. See `docs/EVIDENCE_LEDGER.md` for the current
+> record; the test counts below are historical.
+
 # A/B completion audit — 2026-09-19
 
 The current checkout is `main` at base revision `cd757f0` plus the uncommitted A/B

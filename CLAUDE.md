@@ -35,6 +35,11 @@ hotpath run configs/demo_repo_beam.yaml     # offline run exercising beam branch
 
 pytest -q                                   # make test
 
+# One command on someone else's repo: assess -> baseline -> benchmark -> search -> draft PR
+hotpath.cmd https://github.com/you/repo     # Windows wrapper (hotpath.sh on macOS/Linux)
+hotpath go <url|owner/repo|path> [--yes] [--provider mock --mock-patches DIR] [--sandbox local]
+hotpath assess <path> [--json]              # read-only detection report
+
 # Inside any repo (config = nearest .hotpath.yaml):
 hotpath init                                # .hotpath.yaml + .github/workflows/hotpath-verify.yml
 hotpath run --pr                            # run, then push hotpath/<run id> and open/refresh a PR
@@ -83,6 +88,16 @@ in for models, the `demo_repo`/tests fixtures stand in for a target.
 - `harness.py` — `run_experiment`: patch → test → bench → decision; the `QuietLock`
 - `ablation.py` — leave-one-out re-measurement of the accepted chain
 - `benchlib.py` / `profilelib.py` — helpers targets import (perf_counter / CUDA events; cProfile / torch.profiler)
+
+**Guided flow (`docs/GO.md`):** `go.py` runs eight stages (setup → fetch → assess → baseline →
+benchmark → configure → optimize → publish) and stops with a reason at any of them. `assess.py` is
+static-only detection (ecosystem, tier, test/bench commands, editable vs locked, dependencies — never
+the project itself, which would shadow the worktree). `sandbox.py` builds the per-target venv or Docker
+runner image and exposes the `Runner` used before the search starts. `benchgen.py` generates a benchmark
+when the repo has none and **validates it by running it**; `benchwrap.py` times any command;
+`testprofile.py` profiles the test suite. The setup commit carries the `Hotpath-Setup: 1` trailer, which
+`pr.py` accepts as the PR's first commit and the generated CI scope check exempts (only for that commit,
+only for setup files).
 
 **Agent / product:**
 - `context.py` — AST-based retrieval of hotspot functions for the planner
@@ -171,5 +186,5 @@ These exist because a naive profile diff fabricates claims, which is the one thi
 - When touching the harness, the bar is: every failure mode becomes a *structured status*, every number is *defensible*. Never let a model-authored path influence a measurement.
 - Locked paths are enforced in `workspace.py` in code — the planner is *told* about them too, but the code is the guarantee. Don't weaken that.
 - Platform is Windows (PowerShell primary; Bash tool available). The quick-start `source .venv/bin/activate` is POSIX — use `.venv\Scripts\Activate.ps1` locally.
-- **Activate the venv before `pytest`.** Targets run `python bench.py` as a subprocess, so invoking `.venv\Scripts\python.exe -m pytest` without `.venv\Scripts` on `PATH` makes those subprocesses resolve to system Python, where `hotpath` is not installed; ~19 tests then fail with `ModuleNotFoundError: No module named 'hotpath'`. That is a PATH problem, not a regression.
+- **`pytest` must run from the interpreter `hotpath` is installed into.** Targets run `python bench.py` as a subprocess; if that resolves to an interpreter without `hotpath`, ~19 tests fail with `ModuleNotFoundError: No module named 'hotpath'`. That is a PATH problem, not a regression. On this dev machine there is **no `.venv`** — `hotpath` is installed editable into system Python 3.13, so plain `python -m pytest -q` is correct. In a checkout where the wrapper created one, put `.venv\Scripts` on `PATH` first (`.venv\Scripts\Activate.ps1`) rather than calling `.venv\Scripts\python.exe` directly.
 - There is a stray `{hotpath` directory (and empty `dashboard/`) at the repo root — leftovers from a shell brace-expansion `mkdir` that didn't expand. They are junk, not part of the package (`pyproject` builds `hotpath*` + `server*`). Safe to delete, but confirm before doing so.

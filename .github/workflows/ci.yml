@@ -1,10 +1,15 @@
 name: tests
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  push:                 # every branch, not just main: an unmerged branch that never builds is how
+  pull_request:         # 2,900 lines once reached `origin` without a single CI run
   workflow_dispatch:
+
+# A new push supersedes the one before it; `pull_request` also covers forks, whose pushes we
+# never see, so a PR from this repo costs one extra run and an outside contributor still gets CI.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   pytest:

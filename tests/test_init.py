@@ -119,6 +119,56 @@ def test_generated_scope_check_accepts_only_editable_unlocked_paths(repo, change
     assert (res.returncode == 0) == ok, res.stdout + res.stderr
 
 
+def _branch_with(repo, commits):
+    """commits: list of (message, {path: text}) applied on a hotpath/ branch after origin/main."""
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    git(repo, "checkout", "-q", "-b", "hotpath/run_y")
+    for message, files in commits:
+        for rel, text in files.items():
+            p = repo / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text)
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", message)
+
+
+def _scope(repo, script):
+    return subprocess.run([sys.executable, "-c", script], cwd=repo, capture_output=True, text=True,
+                          env={**os.environ, "BASE_REF": "main"})
+
+
+@pytest.mark.parametrize("second,ok", [({"mod.py": "x = 1\n"}, True),
+                                       ({".hotpath.yaml": "tampered: true\n"}, False)])
+def test_scope_check_exempts_only_a_marked_first_setup_commit(repo, second, ok):
+    answers, _ = gather_answers(repo, execution="local")
+    init_repo(repo, answers)
+    script = _scope_script(repo)
+    for p in (repo / ".hotpath.yaml", repo / WORKFLOW_PATH):
+        p.unlink()
+    setup = {".hotpath.yaml": (repo / ".gitignore").read_text() and "name: x\n",
+             ".github/workflows/hotpath-verify.yml": "on: pull_request\n", "hotpath_bench.py": "# bench\n"}
+    _branch_with(repo, [("hotpath: set up\n\nHotpath-Setup: 1", setup), ("perf: change", second)])
+    res = _scope(repo, script)
+    assert (res.returncode == 0) == ok, res.stdout + res.stderr
+
+
+def test_scope_check_does_not_exempt_an_unmarked_setup_commit(repo):
+    answers, _ = gather_answers(repo, execution="local")
+    init_repo(repo, answers)
+    script = _scope_script(repo)
+    (repo / ".hotpath.yaml").unlink()
+    _branch_with(repo, [("setup without trailer", {".hotpath.yaml": "name: x\n"})])
+    assert _scope(repo, script).returncode == 1
+
+
+def test_scope_check_exemption_covers_only_setup_files(repo):
+    answers, _ = gather_answers(repo, execution="local")
+    init_repo(repo, answers)
+    script = _scope_script(repo)
+    _branch_with(repo, [("hotpath: set up\n\nHotpath-Setup: 1", {"tests/check.py": "print('weakened')\n"})])
+    assert _scope(repo, script).returncode == 1
+
+
 def test_cli_init_is_non_interactive_with_yes(repo, capsys):
     assert main(["init", str(repo), "--yes", "--execution", "local", "--worker", "openai"]) == 0
     out = capsys.readouterr().out

@@ -31,7 +31,11 @@ the H100 (Training workstation).
    commit, config snapshot, aggregate samples, and per-shape samples with the export.
 2. **Swap in Dryft's actual model** if they provide one (`targets/torch_transformer/SWAP_DRYFT.md`) and
    mirror their exact `tests/check.py` correctness definition. The TinyGPT stand-in is not enough.
-3. **Exercise current Baseten worker quality** on the final target; the CPU demo result is historical.
+3. **Exercise current Baseten worker quality** on the *GPU* target. As of 2026-09-22 the worker is
+   no longer historical on CPU: `moonshotai/Kimi-K2.7-Code` wrote every patch in a live `hotpath go`
+   run against `jaraco/inflect`, including the two accepted changes in
+   https://github.com/Nijjea1/inflect/pull/1 (1.472x). Its quality on `torch_transformer` is still
+   untested.
 4. Rotate the API keys after the event (they were shared in chat).
 
 ## Exact steps to get the H100 (verified commands)

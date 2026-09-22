@@ -31,6 +31,10 @@ OPENAI_WORKER_MODEL = "gpt-4.1-mini"
 #: that re-checks them, and Hotpath's own settings.
 ALWAYS_LOCKED = ["tests/*", "test/*", "test_*.py", "*_test.py", "conftest.py", "setup.py", "noxfile.py",
                  ".github/*", ".hotpath.yaml"]
+#: What a `hotpath go` setup commit may add or change: the config, this CI check, the benchmark files,
+#: and the .gitignore entry for `.hotpath/`.
+SETUP_FILES = [".hotpath.yaml", ".github/workflows/hotpath-verify.yml", ".gitignore", "hotpath_workload.py",
+               "hotpath_bench.py", "hotpath_profile.py"]
 
 
 class InitError(RuntimeError):
@@ -190,15 +194,25 @@ import fnmatch, os, subprocess, sys
 from pathlib import PurePosixPath
 EDITABLE = {editable}
 LOCKED = {locked}
+SETUP_FILES = {setup_files}
+def git(*args):
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
 base = "origin/" + os.environ["BASE_REF"]
-out = subprocess.run(["git", "diff", "--name-only", base + "...HEAD"], capture_output=True, text=True, check=True).stdout
+# Each commit is checked on its own. The one exception is a first commit marked as Hotpath's setup
+# (it adds this check, the config, and the benchmark); it may touch those files and nothing else.
+commits = git("rev-list", "--reverse", "--no-merges", base + "..HEAD").split()
 bad = []
-for path in filter(None, out.splitlines()):
-    name = PurePosixPath(path).name
-    if any(fnmatch.fnmatch(path, p) or fnmatch.fnmatch(name, p) for p in LOCKED):
-        bad.append(path + " is locked (tests, benchmark, CI, or Hotpath settings)")
-    elif not any(fnmatch.fnmatch(path, p) for p in EDITABLE):
-        bad.append(path + " is outside the editable patterns")
+for i, sha in enumerate(commits):
+    files = [p for p in git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).splitlines() if p]
+    setup = i == 0 and "Hotpath-Setup: 1" in git("log", "-1", "--format=%B", sha).splitlines()
+    for path in files:
+        name = PurePosixPath(path).name
+        if setup and path in SETUP_FILES:
+            continue
+        if any(fnmatch.fnmatch(path, p) or fnmatch.fnmatch(name, p) for p in LOCKED):
+            bad.append(path + " is locked (tests, benchmark, CI, or Hotpath settings)")
+        elif not any(fnmatch.fnmatch(path, p) for p in EDITABLE):
+            bad.append(path + " is outside the editable patterns")
 if bad:
     print("Hotpath may only change editable, unlocked files:")
     print("\\n".join("  " + b for b in bad))
@@ -208,7 +222,8 @@ print("ok: every changed path is editable and unlocked")
 
 
 def render_workflow(a: InitAnswers) -> str:
-    script = _SCOPE_SCRIPT.format(editable=json.dumps(a.editable), locked=json.dumps(a.locked))
+    script = _SCOPE_SCRIPT.format(editable=json.dumps(a.editable), locked=json.dumps(a.locked),
+                                  setup_files=json.dumps(SETUP_FILES))
     script = "\n".join(("          " + line) if line else "" for line in script.splitlines())
     pytest_install = "\n          pip install pytest" if "pytest" in a.test_cmd else ""
     return f"""# Written by `hotpath init`. Re-verifies Hotpath pull requests on GitHub's machines,

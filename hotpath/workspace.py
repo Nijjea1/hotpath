@@ -7,6 +7,7 @@ checkout. Locked paths are enforced here in code, never merely in the prompt.
 from __future__ import annotations
 
 import fnmatch
+import functools
 import io
 import os
 import shutil
@@ -30,6 +31,32 @@ class LockedFileError(PatchError):
     """The edit targeted a locked or non-editable path."""
 
 
+@functools.lru_cache(maxsize=64)
+def _eol_options(cwd: str) -> tuple[str, ...]:
+    """Line-ending settings, re-supplied because `GIT_CONFIG_NOSYSTEM` drops them.
+
+    Git for Windows ships `core.autocrlf=true` in its *system* config. A checkout made by ordinary
+    git therefore has CRLF in the working tree while the index holds LF. Hotpath's own git calls
+    disable the system config, so without this they judge every rewritten file to be modified —
+    and `ensure_repo` then refuses a repository that is, to everyone else, perfectly clean.
+
+    Unlike hooks, filters and external diffs, these two settings only choose which bytes land on
+    disk; they cannot run anything. The value is matched against a closed set before it is
+    forwarded, so untrusted config still cannot inject an option.
+    """
+    options: list[str] = []
+    for key, allowed in (("core.autocrlf", ("true", "false", "input")), ("core.eol", ("lf", "crlf", "native"))):
+        try:
+            res = subprocess.run(["git", "-c", f"safe.directory={cwd}", "config", "--get", key],
+                                 cwd=cwd, capture_output=True, text=True)
+        except OSError:
+            return ()
+        value = res.stdout.strip().lower()
+        if value in allowed:
+            options += ["-c", f"{key}={value}"]
+    return tuple(options)
+
+
 def _git(args: list[str], cwd: Path, *, strip: bool = True) -> str:
     # Never execute repository-provided hooks, fsmonitor, filters, or external diffs
     # on the orchestrator host. Repository-local config is untrusted input.
@@ -43,7 +70,8 @@ def _git(args: list[str], cwd: Path, *, strip: bool = True) -> str:
     options = ["-c", f"safe.directory={cwd.resolve()}",
                "-c", f"core.hooksPath={os.devnull}", "-c", "core.fsmonitor=false",
                "-c", "core.untrackedCache=false",
-               "-c", "core.attributesFile=" + os.devnull]
+               "-c", "core.attributesFile=" + os.devnull,
+               *_eol_options(str(cwd.resolve()))]
     try:
         config = subprocess.run(["git", "-c", f"safe.directory={cwd.resolve()}", "config", "--local", "--name-only", "--get-regexp", "^filter\\."],
                                 cwd=str(cwd), capture_output=True, text=True, env=env)
@@ -163,8 +191,13 @@ class Workspace:
                 gitignore = self.target / ".gitignore"
                 if gitignore.is_symlink():
                     raise LockedFileError("target .gitignore is a symlink")
-                with gitignore.open("a") as f:
-                    f.write("\n.hotpath/\n__pycache__/\n.env\n.env.*\n")
+                # Append only what is missing. Appending the whole block unconditionally leaves a
+                # duplicate every time a fresh run touches a repository that already has these.
+                present = gitignore.read_text().splitlines() if gitignore.exists() else []
+                missing = [ln for ln in (".hotpath/", "__pycache__/", ".env", ".env.*") if ln not in present]
+                if missing:
+                    with gitignore.open("a") as f:
+                        f.write("\n" + "\n".join(missing) + "\n")
             _git(["add", "-A"], self.target)
             _git(["commit", "-q", "-m", "hotpath: snapshot before optimization run", "--allow-empty"], self.target)
         self.workdir.mkdir(parents=True, exist_ok=True)
