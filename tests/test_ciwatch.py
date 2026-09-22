@@ -7,6 +7,7 @@ claimed to have been fixed.
 import pytest
 
 from hotpath.ciwatch import Check, Gh, Verdict, classify, inspect
+from hotpath.github import RepoRef
 
 
 def check(name, conclusion="success", status="completed", url=""):
@@ -63,15 +64,15 @@ def test_summary_names_each_bucket():
 
 
 def test_inspect_says_so_when_gh_is_missing(monkeypatch):
-    gh = Gh.__new__(Gh)
-    gh.binary = None
+    monkeypatch.setattr("hotpath.ciwatch.gh_binary", lambda: None)   # machine without the CLI
+    gh = Gh(RepoRef("github.com", "o", "r"))
+    assert not gh.available
     v = inspect(gh, "head", "base")
     assert not v.green and "gh" in v.unavailable
 
 
 def test_inspect_reports_a_repository_without_ci(monkeypatch):
-    gh = Gh.__new__(Gh)
-    gh.binary = "gh"
+    gh = Gh(RepoRef("github.com", "o", "r"), binary="gh")
     monkeypatch.setattr(Gh, "checks_for_ref", lambda self, ref: [])
     v = inspect(gh, "head", "base")
     assert "no CI checks are configured" in v.unavailable
@@ -95,10 +96,73 @@ def test_log_excerpt_keeps_the_error_and_drops_the_noise(monkeypatch, tmp_path):
     class Res:
         stdout = raw
     monkeypatch.setattr("hotpath.ciwatch.subprocess.run", lambda *a, **k: Res())
-    gh = Gh.__new__(Gh)
-    gh.binary, gh.timeout = "gh", 5
-    gh.repo = type("R", (), {"slug": lambda self: "o/r"})()
+    # The real RepoRef, never a stand-in: a fake whose `slug` was a method instead of a property
+    # let `self.repo.slug()` ship, and it crashed on the first live pull request.
+    gh = Gh(RepoRef("github.com", "o", "r"), binary="gh")
     excerpt = gh.failing_log(check("build", "failure", url="https://x/job/123"))
     assert "ModuleNotFoundError" in excerpt and "ERROR collecting" in excerpt
     assert "2026-09-22T" not in excerpt, "timestamps should be stripped"
     assert "Downloading something irrelevant" not in excerpt
+
+
+def test_queries_are_built_against_the_real_RepoRef(monkeypatch):
+    """`slug` is a property on RepoRef. Calling it broke the first live run, and the unit tests
+    missed it because they used a hand-made double whose `slug` was a method."""
+    seen = []
+
+    class Res:
+        returncode, stdout = 0, '[]'
+    monkeypatch.setattr("hotpath.ciwatch.subprocess.run",
+                        lambda args, **k: (seen.append(args), Res())[1])
+    gh = Gh(RepoRef("github.com", "octo", "repo"), binary="gh")
+    gh.checks_for_ref("deadbeef")
+    flat = " ".join(seen[0])
+    assert "octo/repo" in flat and "slug" not in flat
+    assert "repos/octo/repo/commits/deadbeef/check-runs" in flat
+
+
+def test_an_unreadable_answer_is_never_reported_as_no_ci(monkeypatch):
+    """`gh api --paginate --jq` emits one JSON value per page, so a single json.loads fails. That
+    parse error was being reported as "no CI checks are configured" — a broken query presented as
+    a clean bill of health, which is the one thing this project must not do."""
+    class Res:
+        returncode, stdout = 0, '{"name": "a"}\nnot json at all\n'
+    monkeypatch.setattr("hotpath.ciwatch.subprocess.run", lambda *a, **k: Res())
+    gh = Gh(RepoRef("github.com", "o", "r"), binary="gh")
+    assert gh.checks_for_ref("sha") is None, "a garbled answer must not look like an empty one"
+
+    monkeypatch.setattr(Gh, "checks_for_ref", lambda self, ref: None)
+    v = inspect(gh, "head", "base")
+    assert "could not be read" in v.unavailable and not v.green
+    assert "no CI checks are configured" not in v.unavailable
+
+
+def test_checks_are_parsed_from_one_object_per_line(monkeypatch):
+    class Res:
+        returncode = 0
+        stdout = ('{"name": "test", "conclusion": "failure", "status": "completed"}\n'
+                  '{"name": "docs", "conclusion": "success", "status": "completed"}\n')
+    monkeypatch.setattr("hotpath.ciwatch.subprocess.run", lambda *a, **k: Res())
+    gh = Gh(RepoRef("github.com", "o", "r"), binary="gh")
+    checks = gh.checks_for_ref("sha")
+    assert [c.name for c in checks] == ["test", "docs"]
+    assert checks[0].failed and not checks[1].failed
+
+
+def test_a_forks_empty_base_falls_back_to_the_upstream_repository(monkeypatch):
+    """`go` tells you to fork when you lack push access, and a fork's default branch has no CI
+    history — so without this every failure lands in 'unknown' and nothing is ever attributable."""
+    fork = Gh(RepoRef("github.com", "me", "proj"), binary="gh")
+    upstream = Gh(RepoRef("github.com", "them", "proj"), binary="gh")
+
+    head = [check("test", "failure"), check("docs")]
+    monkeypatch.setattr(Gh, "parent", lambda self: upstream if self is fork else None)
+    monkeypatch.setattr("hotpath.ciwatch.wait_for_checks", lambda *a, **k: (head, False))
+    monkeypatch.setattr(Gh, "checks_for_ref",
+                        lambda self, ref: [] if self is fork else [check("test", "failure"), check("docs")])
+
+    said = []
+    v = inspect(fork, "head", "base", say=said.append)
+    assert [c.name for c in v.pre_existing] == ["test"], "upstream also fails it: not ours"
+    assert not v.introduced
+    assert any("them/proj" in line for line in said), "the different source must be stated"

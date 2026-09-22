@@ -96,7 +96,7 @@ class Gh:
         if not self.binary:
             return None
         try:
-            res = subprocess.run([self.binary, *args, "--repo", self.repo.slug()],
+            res = subprocess.run([self.binary, *args, "--repo", self.repo.slug],
                                  capture_output=True, text=True, timeout=self.timeout)
         except (OSError, subprocess.SubprocessError):
             return None
@@ -108,12 +108,33 @@ class Gh:
             return None
 
     def checks_for_ref(self, ref: str) -> Optional[list[Check]]:
-        """Every check run recorded against a commit."""
-        data = self._json(["api", f"repos/{self.repo.slug()}/commits/{ref}/check-runs",
-                           "--paginate", "--jq", ".check_runs"])
-        if data is None:
+        """Every check run recorded against a commit, or None when GitHub could not be read.
+
+        None and [] are different answers and the caller must keep them apart: one means "we do not
+        know", the other means "this repository has no CI". Reporting the first as the second is how
+        a broken query turns into a clean bill of health.
+        """
+        if not self.binary:
             return None
-        rows = data if isinstance(data, list) else []
+        # `--paginate` with `--jq` emits one result per page, so the output is a stream of JSON
+        # values rather than a single document. Ask for one object per line and read it as such.
+        try:
+            res = subprocess.run([self.binary, "api", f"repos/{self.repo.slug}/commits/{ref}/check-runs",
+                                  "--paginate", "--jq", ".check_runs[]"],
+                                 capture_output=True, text=True, timeout=self.timeout)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if res.returncode != 0:
+            return None
+        rows = []
+        for line in res.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                return None          # a garbled answer is not an empty one
         out: list[Check] = []
         for row in rows:
             if not isinstance(row, dict):
@@ -125,6 +146,28 @@ class Gh:
                              run_id=str((row.get("check_suite") or {}).get("id") or "")))
         return out
 
+    def parent(self) -> Optional["Gh"]:
+        """The repository this one was forked from, if any.
+
+        A fork's default branch usually has no CI history, so there is nothing to compare a pull
+        request against and every failure would be filed as "unknown". The upstream repository has
+        results for the very same base commit — the same tree, built by the same workflows — so it
+        answers the question the fork cannot.
+        """
+        if not self.binary:
+            return None
+        try:
+            res = subprocess.run([self.binary, "api", f"repos/{self.repo.slug}",
+                                  "--jq", ".parent.full_name"],
+                                 capture_output=True, text=True, timeout=self.timeout)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        slug = res.stdout.strip() if res.returncode == 0 else ""
+        owner, _, name = slug.partition("/")
+        if not owner or not name:
+            return None
+        return Gh(RepoRef(self.repo.host, owner, name), binary=self.binary, timeout=self.timeout)
+
     def failing_log(self, check: Check, max_chars: int = 4000) -> str:
         """The interesting lines of a failed job's log, newest signal first."""
         if not self.binary or not check.url:
@@ -134,7 +177,7 @@ class Gh:
             return ""
         try:
             res = subprocess.run([self.binary, "run", "view", "--job", m.group(1), "--log-failed",
-                                  "--repo", self.repo.slug()],
+                                  "--repo", self.repo.slug],
                                  capture_output=True, text=True, timeout=self.timeout)
         except (OSError, subprocess.SubprocessError):
             return ""
@@ -149,8 +192,9 @@ class Gh:
 
 def wait_for_checks(gh: Gh, ref: str, *, timeout_s: float = 900, poll_s: float = 20,
                     settle_s: float = 45, say: Callable[[str], None] = lambda _m: None
-                    ) -> tuple[list[Check], bool]:
-    """Poll until every check on `ref` has completed. Returns (checks, timed_out).
+                    ) -> tuple[Optional[list[Check]], bool]:
+    """Poll until every check on `ref` has completed. Returns (checks, timed_out), checks None
+    when GitHub could not be read at all.
 
     CI does not register all of its jobs at once, so "zero checks" and "all checks passed" look
     identical for the first minute. `settle_s` is how long an empty or all-green result must hold
@@ -159,11 +203,11 @@ def wait_for_checks(gh: Gh, ref: str, *, timeout_s: float = 900, poll_s: float =
     deadline = time.monotonic() + timeout_s
     stable_since: Optional[float] = None
     last_note = 0.0
-    checks: list[Check] = []
+    checks: Optional[list[Check]] = None
     while time.monotonic() < deadline:
         fetched = gh.checks_for_ref(ref)
         if fetched is None:
-            return [], False
+            return None, False       # could not read GitHub: not the same as "no checks"
         checks = fetched
         pending = [c for c in checks if not c.settled]
         if pending:
@@ -207,10 +251,22 @@ def inspect(gh: Gh, head_sha: str, base_sha: str, *, timeout_s: float = 900,
     if not gh.available:
         return Verdict(unavailable="the gh CLI is not available, so CI could not be read")
     head_checks, timed_out = wait_for_checks(gh, head_sha, timeout_s=timeout_s, say=say)
+    if head_checks is None:
+        return Verdict(unavailable="GitHub's check-runs API could not be read, so CI is unknown")
     if not head_checks:
         return Verdict(unavailable="no CI checks are configured on this repository" if not timed_out
                        else "no CI checks had reported before the wait expired")
     base_checks = gh.checks_for_ref(base_sha)
+    if not base_checks:
+        # A fork's own base has no CI history; ask the repository it was forked from about the
+        # identical commit, and say so, because it is a different repository's answer.
+        upstream = gh.parent()
+        if upstream is not None:
+            inherited = upstream.checks_for_ref(base_sha)
+            if inherited:
+                say(f"the base has no checks here; comparing against {upstream.repo.slug} "
+                    f"where the same commit was built")
+                base_checks = inherited
     verdict = classify(head_checks, base_checks)
     verdict.timed_out = timed_out
     return verdict

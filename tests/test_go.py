@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from hotpath.go import Go, GoOptions, parse_target, GoStop
+from hotpath.go import STAGES, Go, GoOptions, parse_target, GoStop
 from hotpath.pr import SETUP_TRAILER
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -63,7 +63,7 @@ def test_go_end_to_end_pushes_a_verified_branch_with_the_setup_commit_first(tmp_
     remote = make_remote(tmp_path)
     code, out = run_go(opts(tmp_path, remote.as_uri(), yes=True))
     assert code == 0, out
-    for stage in ("[1/8] Setup", "[4/8] Baseline", "[5/8] Benchmark", "[7/8] Optimize", "[8/8] Publish"):
+    for stage in ("[1/9] Setup", "[4/9] Baseline", "[5/9] Benchmark", "[7/9] Optimize", "[8/9] Publish"):
         assert stage in out
     assert "not flaky" in out and "pushed to origin" in out
     assert "existing benchmark" in out and "python bench.py" in out
@@ -99,7 +99,7 @@ def test_go_never_pushes_without_confirmation(tmp_path):
     # Whether a win is found depends on the machine's noise; what must always hold is that a push only
     # ever happens after an explicit yes, so nothing reached the remote here.
     assert git(remote, "branch", "--list", "hotpath/*") == ""
-    if "[8/8]" in out:
+    if "[8/9]" in out:
         assert any("Push branch" in q for q in asked) and "built locally" in out
 
 
@@ -129,7 +129,7 @@ def test_go_stops_on_failing_baseline_tests(tmp_path):
     remote = make_remote(tmp_path, edit=break_it)
     code, out = run_go(opts(tmp_path, remote.as_uri(), yes=True))
     assert code == 1 and "tests fail on the untouched code" in out
-    assert "[5/8]" not in out
+    assert "[5/9]" not in out
 
 
 def test_go_detects_flaky_tests(tmp_path):
@@ -320,3 +320,13 @@ def test_source_budget_reports_a_file_no_worker_can_be_shown(tmp_path):
     go.repo, go.a = repo, assess(repo)
     assert go._source_budget(14_000) == 14_000          # nothing editable fits, so leave it alone
     assert any("will not be offered to a worker" in line for line in said)
+
+
+def test_stage_labels_match_the_stage_list():
+    """The banner and the tests both hard-code stage numbers; adding a stage must update both."""
+    from hotpath import go as go_module
+
+    assert len(STAGES) == 9 and STAGES[-1] == "Verify"
+    banner = go_module.__doc__ or ""
+    for n, name in enumerate(STAGES, start=1):
+        assert f"[{n}/{len(STAGES)}] {name}" in banner, f"stage {n} missing from the module banner"
