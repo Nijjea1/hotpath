@@ -1,13 +1,14 @@
 """`hotpath go <repo>`: from a repository URL to a verified pull request in one command.
 
-    [1/8] Setup      tools, GitHub access, API keys
-    [2/8] Fetch      clone (or use a local checkout), find the default branch, check push access
-    [3/8] Assess     static look at the repo: ecosystem, tests, benchmark, editable vs locked files
-    [4/8] Baseline   install dependencies (never the project), run the tests 3 times: green and not flaky
-    [5/8] Benchmark  existing, generated from the tests' hot paths and validated, or the test suite itself
-    [6/8] Configure  commit .hotpath.yaml + benchmark + CI check on a setup branch (marked Hotpath-Setup)
-    [7/8] Optimize   the normal search, with token and time budgets
-    [8/8] Publish    one commit per verified change, draft PR, opened in the browser
+    [1/9] Setup      tools, GitHub access, API keys
+    [2/9] Fetch      clone (or use a local checkout), find the default branch, check push access
+    [3/9] Assess     static look at the repo: ecosystem, tests, benchmark, editable vs locked files
+    [4/9] Baseline   install dependencies (never the project), run the tests 3 times: green and not flaky
+    [5/9] Benchmark  existing, generated from the tests' hot paths and validated, or the test suite itself
+    [6/9] Configure  commit .hotpath.yaml + benchmark + CI check on a setup branch (marked Hotpath-Setup)
+    [7/9] Optimize   the normal search, with token and time budgets
+    [8/9] Publish    one commit per verified change, draft PR, opened in the browser
+    [9/9] Verify     wait for the repository's own CI, and fix what this pull request broke
 
 Every stage either finishes or stops with the reason and the next step. Nothing is pushed without a
 confirmation (or --yes), and nothing is ever pushed to the default branch.
@@ -34,7 +35,7 @@ from hotpath.assess import GENERATED_FILES, Assessment, assess
 from hotpath.config import CONFIG_NAMES, hotpath_home, load_config
 from hotpath.schema import TERMINAL_STATUSES
 
-STAGES = ["Setup", "Fetch", "Assess", "Baseline", "Benchmark", "Configure", "Optimize", "Publish"]
+STAGES = ["Setup", "Fetch", "Assess", "Baseline", "Benchmark", "Configure", "Optimize", "Publish", "Verify"]
 _GH_URL = re.compile(r"^(?:https?://github\.com/|git@github\.com:)([\w.-]+)/([\w.-]+?)(?:\.git)?/?$")
 _SHORTHAND = re.compile(r"^([\w.-]+)/([\w.-]+)$")
 _PYTEST_SUMMARY = re.compile(r"(\d+) passed")
@@ -71,6 +72,9 @@ class GoOptions:
     ready: bool = False                       # open a ready-for-review PR instead of a draft
     open_browser: bool = True
     dashboard: bool = True
+    verify_ci: bool = True                    # watch the PR's checks, and fix what the PR broke
+    ci_attempts: int = 2                      # how many times to try repairing CI
+    ci_timeout: float = 900.0                 # seconds to wait for checks to settle
     port: int = 8765
     workspaces: Optional[str] = None
     remote: str = "origin"
@@ -93,6 +97,9 @@ class GoState:
     bench_description: str = ""
     run_id: str = ""
     pr_url: str = ""
+    pr_branch: str = ""
+    pr_head_sha: str = ""
+    ci_state: str = ""                        # green | introduced | pre_existing | unknown | unavailable
     stages_done: list[str] = field(default_factory=list)
 
 
@@ -206,7 +213,7 @@ class Go:
         with obs.transaction("hotpath go", op="hotpath.go", target=self.o.target):
             try:
                 for i, stage in enumerate([self.setup, self.fetch, self.assess, self.baseline, self.benchmark,
-                                           self.configure, self.optimize, self.publish], start=1):
+                                           self.configure, self.optimize, self.publish, self.verify], start=1):
                     with obs.span("hotpath.go.stage", STAGES[i - 1]):
                         stage(i)
                 self.out(f"\ndone in {self._elapsed()}.")
@@ -850,6 +857,8 @@ class Go:
         body_file = self._ws.workdir / "prs" / f"{self._run.id}.md"
         if body_file.exists():
             shutil.copyfile(body_file, summary_file)
+        self.state.pr_branch, self.state.pr_head_sha = rec.branch, rec.head_sha
+        self._pr = rec
         if rec.url:
             self.state.pr_url = rec.url
             self.step(i, rec.url + (" (draft)" if not self.o.ready else ""))
@@ -867,3 +876,143 @@ class Go:
             self.step(i, f"branch {rec.branch} built locally ({why}); the description is in {summary_file}")
             self.info(f"to publish later: cd {self.repo} && hotpath pr --run-id {self._run.id} --base "
                       f"{self.state.base_branch} --draft")
+
+    # ------------------------------------------------------------------ 9
+    def verify(self, i: int) -> None:
+        """Watch the pull request's CI, and fix what this pull request broke.
+
+        A verified speedup that turns someone's CI red is not a finished job. But a repository's CI
+        can be red on its own account, so every failure is judged against the base commit first and
+        only the ones this branch introduced are touched. Any fix goes through the same harness as
+        every other patch: the locked tests must pass and the benchmark must still be faster.
+        """
+        from hotpath import ciwatch
+
+        if not self.state.pr_head_sha or not self.state.github:
+            self.step(i, "no pull request was pushed, so there is no CI to check")
+            return
+        if not self.o.verify_ci:
+            self.step(i, f"not checking CI (--no-verify-ci); watch it at {self.state.pr_url or self.state.pr_branch}")
+            return
+        from hotpath.github import RepoRef
+        owner, _, name = self.state.github.partition("/")
+        gh = ciwatch.Gh(RepoRef("github.com", owner, name))
+        self.info(f"watching CI on {self.state.pr_head_sha[:8]} (up to {self.o.ci_timeout / 60:.0f} min)")
+        verdict = ciwatch.inspect(gh, self.state.pr_head_sha, self.state.base_commit,
+                                  timeout_s=self.o.ci_timeout, say=self.info)
+        self.state.ci_state = ("unavailable" if verdict.unavailable else
+                               "green" if verdict.green else
+                               "introduced" if verdict.introduced else
+                               "unknown" if verdict.unknown else "pre_existing")
+        self._save()
+        for check in verdict.pre_existing:
+            self.info(f"already failing on {self.state.base_branch}, not ours to fix: {check.name}")
+        for check in verdict.unknown:
+            self.info(f"failed with no result on the base to compare against: {check.name}")
+        if verdict.green:
+            self.step(i, f"CI green - {verdict.summary()}")
+            return
+        if verdict.unavailable or not verdict.introduced:
+            self.step(i, verdict.summary())
+            if verdict.introduced or verdict.unknown:
+                self.info("the pull request stays open; the failures above need a human")
+            return
+        self.info(f"CI failed: {verdict.summary()}")
+        self.info("these checks pass on the base commit, so this branch broke them:")
+        for check in verdict.introduced:
+            self.info(f"  x {check.name}  {check.url}")
+        fixed = self._fix_ci(gh, verdict, i)
+        if not fixed:
+            self.step(i, f"CI still failing - {verdict.summary()}; the pull request stays open")
+
+    def _fix_ci(self, gh, verdict, i: int) -> bool:
+        """Feed the failing logs back, verify any fix with the harness, push, and look again."""
+        from hotpath import ciwatch
+
+        for attempt in range(1, self.o.ci_attempts + 1):
+            logs = []
+            for check in verdict.introduced[:3]:
+                excerpt = gh.failing_log(check)
+                if excerpt:
+                    logs.append(f"### CI job `{check.name}` failed\n{excerpt}")
+            if not logs:
+                self.info("could not read the failing logs, so there is nothing to feed back")
+                return False
+            self.info(f"fix attempt {attempt}/{self.o.ci_attempts}: asking a worker to repair "
+                      f"{len(verdict.introduced)} failing check(s)")
+            exp = self._ci_experiment("\n\n".join(logs))
+            if exp is None:
+                return False
+            if exp.status.value != "accepted":
+                self.info(f"the fix was rejected by the harness ({exp.status.value}): "
+                          f"{exp.reject_reason or 'see the dashboard'}")
+                return False
+            self.info(f"fix verified: correct, and {exp.comparison.speedup_vs_parent:.2f}x vs its parent"
+                      if exp.comparison else "fix verified: correct")
+            if not self._republish():
+                return False
+            verdict = ciwatch.inspect(gh, self.state.pr_head_sha, self.state.base_commit,
+                                      timeout_s=self.o.ci_timeout, say=self.info)
+            if verdict.green:
+                self.state.ci_state = "green"
+                self._save()
+                self.step(i, f"CI green after {attempt} fix attempt(s) - {verdict.summary()}")
+                return True
+            if not verdict.introduced:
+                self.step(i, verdict.summary())
+                return True
+            self.info(f"still failing: {verdict.summary()}")
+        return False
+
+    def _ci_experiment(self, failure: str):
+        """One more experiment on top of the published head, whose job is to make CI pass.
+
+        It is an ordinary experiment: the same worker, the same worktree, the same locked tests and
+        the same benchmark. A fix that breaks correctness or gives the speedup back is rejected like
+        any other patch, so CI can never be bought with the thing the run was for.
+        """
+        from hotpath.agent import Agent
+        from hotpath.schema import Experiment, Hypothesis
+
+        head = self._run.head_commit
+        idea = ("Make the repository's own CI pass again. The measured speedup and the locked tests "
+                "must both survive: change only what the failure below is about.")
+        hypothesis = Hypothesis(
+            idea=idea, target_file=self._ci_target_file(), strategy="ci_fix",
+            reason="the pull request broke checks that pass on the base commit", risk="low")
+        exp = Experiment(run_id=self._run.id, parent_id=None, parent_commit=head,
+                         iteration=self._run.iteration + 1, hypothesis=hypothesis,
+                         previous_failure=failure)
+        try:
+            agent = Agent(self._cfg, self._store, self._ws)
+            filled = asyncio.run(agent.write_patches([exp]))
+            if not filled or not filled[0].edits:
+                self.info("the worker returned no edits for the CI failure")
+                return None
+            from hotpath.harness import Harness
+            harness = Harness(self._cfg, self._store, self._ws)
+            parent_bench = self._run.head_benchmark or self._run.baseline_benchmark
+            return asyncio.run(harness.run_experiment(filled[0], parent_bench,
+                                                      self._run.baseline_benchmark, self._run.noise))
+        except Exception as e:  # a CI fix is best-effort; never lose the verified PR over it
+            self.info(f"could not produce a CI fix: {str(e).splitlines()[0][:200]}")
+            return None
+
+    def _ci_target_file(self) -> str:
+        changed = list(self._run.files_changed or [])
+        return changed[0] if changed else (self.a.editable[0].replace("*", "") if self.a else "")
+
+    def _republish(self) -> bool:
+        from hotpath.pr import PRError, publish
+        try:
+            rec = publish(self._cfg, self._store, self._run, self._ws, base=self.state.base_branch,
+                          remote=self.o.remote, draft=not self.o.ready, push=True,
+                          method=self.pr_method, say=self.info)
+        except PRError as e:
+            self.info(f"could not update the pull request: {e}")
+            return False
+        self.state.pr_head_sha = rec.head_sha
+        self._pr = rec
+        self._save()
+        self.info(f"pushed the fix; watching CI on {rec.head_sha[:8]} again")
+        return True

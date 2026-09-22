@@ -141,7 +141,8 @@ def cmd_go(args: argparse.Namespace) -> int:
                      test_cmd=args.test_cmd, bench_cmd=args.bench_cmd, no_generate=args.no_generate,
                      test_runs=args.test_runs, test_timeout=args.test_timeout, no_pr=args.no_pr,
                      pr_method=args.pr_method, ready=args.ready, open_browser=not args.no_open,
-                     dashboard=args.dashboard, port=args.port, workspaces=args.workspaces, remote=args.remote,
+                     dashboard=args.dashboard, verify_ci=args.verify_ci, ci_attempts=args.ci_attempts,
+                     ci_timeout=args.ci_timeout, port=args.port, workspaces=args.workspaces, remote=args.remote,
                      resume=args.resume)
     return Go(opts).run()
 
@@ -287,6 +288,12 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--no-open", action="store_true", help="do not open the PR or dashboard in a browser")
     g.add_argument("--dashboard", action=argparse.BooleanOptionalAction, default=True,
                    help="serve the live dashboard during the search and keep it up afterwards (default: on)")
+    g.add_argument("--verify-ci", action=argparse.BooleanOptionalAction, default=True,
+                   help="after opening the PR, wait for the repository's CI and fix what the PR "
+                        "broke (default: on; failures already present on the base are never touched)")
+    g.add_argument("--ci-attempts", type=int, default=2, help="how many times to try repairing CI")
+    g.add_argument("--ci-timeout", type=float, default=900.0,
+                   help="seconds to wait for CI checks to settle")
     g.add_argument("--port", type=int, default=8765)
     g.add_argument("--workspaces", help="where clones and per-repo environments live (default: ./workspaces)")
     g.add_argument("--remote", default="origin")
