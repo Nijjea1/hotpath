@@ -39,7 +39,7 @@ def make_remote(tmp_path: Path, files_from: Path = FIXTURE, edit=None) -> Path:
 
 def opts(tmp_path: Path, target: str, **kw) -> GoOptions:
     base = dict(target=target, provider="mock", mock_patches=str(PATCHES), sandbox="local", open_browser=False,
-                workspaces=str(tmp_path / "ws"), iterations=2, candidates=3, test_runs=2)
+                dashboard=False, workspaces=str(tmp_path / "ws"), iterations=2, candidates=3, test_runs=2)
     base.update(kw)
     return GoOptions(**base)
 
@@ -178,3 +178,103 @@ def test_go_refuses_a_dirty_local_checkout(tmp_path):
     (src / "scratch.txt").write_text("wip")
     code, out = run_go(opts(tmp_path, str(src), yes=True))
     assert code == 1 and "uncommitted or untracked" in out
+
+
+class FakeServer:
+    """Stands in for the `hotpath serve` subprocess so the tests never bind a port."""
+
+    def __init__(self, *args, **kwargs):
+        self.argv = list(args[0]) if args else []
+        self.terminated = False
+        self.waited = False
+        self._alive = True
+
+    def poll(self):
+        return None if self._alive else 0
+
+    def terminate(self):
+        self.terminated, self._alive = True, False
+
+    def wait(self, timeout=None):
+        self.waited, self._alive = True, False
+        return 0
+
+
+@pytest.fixture
+def fake_dashboard(monkeypatch):
+    """Capture the dashboard subprocess and every browser tab the run opens.
+
+    Only the `hotpath serve` spawn is faked: `subprocess.run` builds on Popen too, so replacing it
+    wholesale would break every git call the run makes."""
+    servers: list[FakeServer] = []
+    opened: list[str] = []
+    real_popen = subprocess.Popen
+
+    def popen(args, *rest, **kwargs):
+        argv = list(args) if isinstance(args, (list, tuple)) else [args]
+        if "hotpath.cli" in argv and "serve" in argv:
+            servers.append(FakeServer(argv))
+            return servers[-1]
+        return real_popen(args, *rest, **kwargs)
+
+    monkeypatch.setattr("hotpath.go.subprocess.Popen", popen)
+    monkeypatch.setattr("hotpath.go.webbrowser.open", lambda url, *a, **kw: opened.append(url))
+    monkeypatch.setattr("hotpath.go.time.sleep", lambda _s: None)
+    return servers, opened
+
+
+def test_dashboard_is_served_and_opened_without_being_asked(tmp_path, fake_dashboard):
+    servers, opened = fake_dashboard
+    remote = make_remote(tmp_path)
+    o = opts(tmp_path, remote.as_uri(), yes=True, no_pr=True, dashboard=True, open_browser=True,
+             iterations=1, candidates=1)
+    code, out = run_go(o, ask=lambda _q: "y")
+    assert code == 0, out
+    assert len(servers) == 1, "the search should serve the dashboard on its own"
+    assert servers[0].argv[1:4] == ["-m", "hotpath.cli", "serve"]
+    assert opened == [f"http://127.0.0.1:{o.port}"]
+    assert f"dashboard: http://127.0.0.1:{o.port}  (still running)" in out
+
+
+def test_dashboard_survives_the_run_when_a_terminal_can_stop_it(tmp_path, fake_dashboard):
+    servers, _ = fake_dashboard
+    remote = make_remote(tmp_path)
+    code, out = run_go(opts(tmp_path, remote.as_uri(), yes=True, no_pr=True, dashboard=True,
+                            iterations=1, candidates=1), ask=lambda _q: "y")
+    assert code == 0, out
+    assert servers[0].waited, "the run should hold the dashboard open, not kill it at exit"
+    assert not servers[0].terminated
+    assert "Ctrl-C to stop the dashboard." in out
+
+
+def test_dashboard_does_not_block_without_a_terminal(tmp_path, fake_dashboard):
+    servers, _ = fake_dashboard
+    remote = make_remote(tmp_path)
+    # ask=None and no tty: nobody could press Ctrl-C, so the run must exit and say how to reopen it.
+    code, out = run_go(opts(tmp_path, remote.as_uri(), yes=True, no_pr=True, dashboard=True,
+                            iterations=1, candidates=1), ask=None)
+    assert code == 0, out
+    assert not servers[0].waited and servers[0].terminated
+    assert "reopen it later with: hotpath serve" in out
+
+
+def test_no_dashboard_and_no_open_are_honoured(tmp_path, fake_dashboard):
+    servers, opened = fake_dashboard
+    remote = make_remote(tmp_path)
+    code, out = run_go(opts(tmp_path, remote.as_uri(), yes=True, no_pr=True, dashboard=False,
+                            iterations=1, candidates=1), ask=lambda _q: "y")
+    assert code == 0, out
+    assert servers == [] and opened == []
+
+    remote2 = make_remote(tmp_path / "second")
+    code, out = run_go(opts(tmp_path / "second", remote2.as_uri(), yes=True, no_pr=True, dashboard=True,
+                            open_browser=False, iterations=1, candidates=1), ask=lambda _q: "y")
+    assert code == 0, out
+    assert len(servers) == 1 and opened == [], "--no-open serves the dashboard but opens no tab"
+
+
+def test_dashboard_is_killed_when_a_stage_fails(tmp_path):
+    g = Go(opts(tmp_path, str(tmp_path), dashboard=True), out=lambda _s: None, ask=lambda _q: "y")
+    g.dashboard_proc = FakeServer()
+    g._cleanup()
+    assert g.dashboard_proc.terminated and not g.dashboard_proc.waited

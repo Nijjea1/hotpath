@@ -26,8 +26,9 @@ hotpath.cmd https://github.com/you/your-repo        # Windows
 
 The wrapper creates `.venv`, installs Hotpath, and runs `hotpath go`: it clones your repo, works out how
 to test and benchmark it, checks the baseline is green and not flaky, runs the search, and opens a
-**draft pull request** with one commit per verified change. Nothing is pushed without your confirmation,
-and never to the default branch.
+**draft pull request** with one commit per verified change. The live dashboard opens in your browser
+while the search runs, and the pull request opens when it is done — neither needs asking for. Nothing
+is pushed without your confirmation, and never to the default branch.
 
 ```
 [1/8] Setup ......... Python 3.12 ✓  git ✓  gh ✓  keys ✓ (workers on Baseten)
@@ -38,7 +39,19 @@ and never to the default branch.
 [6/8] Configure ..... setup commit 9f0c11ab on hotpath-setup/20260920-101500
 [7/8] Optimize ...... 11 candidates · 2 accepted · 3.41x vs baseline
 [8/8] Publish ....... https://github.com/you/your-repo/pull/42 (draft)
+
+done in 6m 12s.
+
+  PR:        https://github.com/you/your-repo/pull/42
+  dashboard: http://127.0.0.1:8765  (still running)
+
+  Ctrl-C to stop the dashboard.
 ```
+
+The dashboard stays up after the run, because that is when it is worth reading: the experiment tree,
+the metric climbing, and a red node for every rejected candidate with the reason it was rejected.
+When *nothing* was accepted it stays up too — "11 tried, 4 broke correctness, 7 inside the noise band"
+is a result, and it is written down there.
 
 If the repository has no benchmark, Hotpath profiles its test suite, has a model write one over the
 hottest functions, and **validates it by running it** before trusting it — then shows it to you for
@@ -281,7 +294,8 @@ targets/torch_transformer/   Dryft-style GPU target (tokens/sec, frozen referenc
 configs/            demo_repo.yaml, demo_repo_openai.yaml, torch_transformer.yaml
 tests/              Tests cover: patch isolation, benchmark decision, every failure mode,
                     state persistence, the full loop, the API, Sentry envelopes,
-                    the bottleneck diff's refusals and bounds, tree/chart derivations
+                    the bottleneck diff's refusals and bounds, tree/chart derivations,
+                    and `go` end to end (clone -> benchmark -> search -> pushed branch)
 ```
 
 ## Working on it as two people

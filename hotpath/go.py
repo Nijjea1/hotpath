@@ -70,7 +70,7 @@ class GoOptions:
     pr_method: str = "auto"
     ready: bool = False                       # open a ready-for-review PR instead of a draft
     open_browser: bool = True
-    dashboard: bool = False
+    dashboard: bool = True
     port: int = 8765
     workspaces: Optional[str] = None
     remote: str = "origin"
@@ -202,6 +202,7 @@ class Go:
             pass
         obs.init_sentry()
         code = 0
+        hold = False
         with obs.transaction("hotpath go", op="hotpath.go", target=self.o.target):
             try:
                 for i, stage in enumerate([self.setup, self.fetch, self.assess, self.baseline, self.benchmark,
@@ -209,15 +210,59 @@ class Go:
                     with obs.span("hotpath.go.stage", STAGES[i - 1]):
                         stage(i)
                 self.out(f"\ndone in {self._elapsed()}.")
+                hold = True
             except GoStop as e:
                 self.out(("\n" if not e.ok else "\n") + ("stopped: " if not e.ok else "") + str(e))
                 code = 0 if e.ok else 1
+                # An honest non-result ("nothing beat the noise floor") is still worth reading on the
+                # dashboard — that is where the rejection reasons are.
+                hold = e.ok
             except KeyboardInterrupt:
                 self.out("\ninterrupted; rerun with --resume to continue")
                 code = 130
             finally:
+                if hold:
+                    self._summary()
+                    self._hold_dashboard()
                 self._cleanup()
         return code
+
+    def _summary(self) -> None:
+        """The two links the run produced, together, after the stage list."""
+        lines = []
+        if self.state.pr_url:
+            lines.append(f"  PR:        {self.state.pr_url}")
+        if self._dashboard_alive():
+            lines.append(f"  dashboard: {self._dashboard_url()}  (still running)")
+        if lines:
+            self.out("")
+            for line in lines:
+                self.out(line)
+
+    def _dashboard_url(self) -> str:
+        return f"http://127.0.0.1:{self.o.port}"
+
+    def _dashboard_alive(self) -> bool:
+        return self.dashboard_proc is not None and self.dashboard_proc.poll() is None
+
+    def _hold_dashboard(self) -> None:
+        """Keep serving after the run: the experiment tree and every rejection reason live there,
+        and killing the server at exit takes the page away exactly when it is worth reading.
+
+        Only with a terminal attached — without one there is nobody to press Ctrl-C, so blocking
+        would hang a script or a CI job instead of being useful."""
+        if not self._dashboard_alive():
+            return
+        assert self.dashboard_proc is not None
+        if self.ask is None:
+            where = f" {self.repo / '.hotpath.yaml'}" if self.repo is not None else ""
+            self.info(f"reopen it later with: hotpath serve{where}")
+            return
+        self.out("\n  Ctrl-C to stop the dashboard.")
+        try:
+            self.dashboard_proc.wait()
+        except KeyboardInterrupt:
+            self.out("")  # leave the shell prompt on its own line
 
     def _elapsed(self) -> str:
         s = int(time.monotonic() - self.t0)
@@ -722,9 +767,12 @@ class Go:
             for e in exps:
                 rejected[e.status.value] = rejected.get(e.status.value, 0) + 1
             why = ", ".join(f"{n} {k}" for k, n in sorted(rejected.items())) or "no candidates"
+            where = (f"Every rejection reason is on the dashboard: {self._dashboard_url()}"
+                     if self._dashboard_alive() else
+                     f"Details: `hotpath serve {self.repo / '.hotpath.yaml'}`")
             raise GoStop(f"no change was both correct and measurably faster ({tried} tried: {why}). That is a "
                          f"real result, not a failure: the code may already be near its limit for this "
-                         f"benchmark. Details: `hotpath serve {self.repo / '.hotpath.yaml'}`", ok=True)
+                         f"benchmark. {where}", ok=True)
         self.step(i, f"{tried} candidates · {len(chain)} accepted · {run.best_speedup:.2f}x vs baseline"
                   + (" (resumed)" if resumed else ""))
         for e in chain:

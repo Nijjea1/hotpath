@@ -263,7 +263,8 @@ def main(argv: list[str] | None = None) -> int:
 
     g = sub.add_parser("go", help="one command: assess a repo, build and test it, find a benchmark, optimize, "
                                   "and open a draft PR")
-    g.add_argument("target", help="GitHub URL, owner/repo, any git URL, or a local checkout")
+    g.add_argument("target", nargs="?", default=".",
+                   help="GitHub URL, owner/repo, any git URL, or a local checkout (default: the current directory)")
     g.add_argument("-y", "--yes", action="store_true",
                    help="accept every default: local execution consent, the benchmark, and pushing the PR branch")
     g.add_argument("--provider", choices=["openai", "mock"], help="model provider (default: openai; mock is offline)")
@@ -284,7 +285,8 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--pr-method", choices=["auto", "gh", "token", "link"], default="auto")
     g.add_argument("--ready", action="store_true", help="open the PR ready for review instead of as a draft")
     g.add_argument("--no-open", action="store_true", help="do not open the PR or dashboard in a browser")
-    g.add_argument("--dashboard", action="store_true", help="serve the live dashboard during the search")
+    g.add_argument("--dashboard", action=argparse.BooleanOptionalAction, default=True,
+                   help="serve the live dashboard during the search and keep it up afterwards (default: on)")
     g.add_argument("--port", type=int, default=8765)
     g.add_argument("--workspaces", help="where clones and per-repo environments live (default: ./workspaces)")
     g.add_argument("--remote", default="origin")

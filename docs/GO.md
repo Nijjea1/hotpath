@@ -69,13 +69,29 @@ commit, so a reviewer can see exactly what "correct" and "faster" meant. Afterwa
 locked: the CI check fails any later commit that touches them.
 
 **7. Optimize.** The normal search. `--iterations`, `--candidates`, `--beam` size it; `--max-tokens` and
-`--max-minutes` bound it (the search stops cleanly and keeps what it has proved). `--dashboard` serves the
-live tree at `http://127.0.0.1:8765`. If nothing beats the noise floor, that is reported as a result and
-no PR is opened.
+`--max-minutes` bound it (the search stops cleanly and keeps what it has proved). The live tree is served
+at `http://127.0.0.1:8765` and opens in your browser on its own; `--no-dashboard` turns that off. If
+nothing beats the noise floor, that is reported as a result and no PR is opened — and the dashboard is
+where each rejection reason is written down, so it stays up in that case too.
 
 **8. Publish.** One commit per verified change, each carrying the exact tree the harness tested, the
 measured speedup and its confidence interval. A draft PR by default (`--ready` for ready-for-review),
-after one confirmation (`--yes` skips it). `--no-pr` builds the branch locally instead.
+after one confirmation (`--yes` skips it). `--no-pr` builds the branch locally instead. The pull request
+opens in your browser, and the dashboard keeps serving until you press Ctrl-C:
+
+```
+[8/8] Publish ....... https://github.com/you/your-repo/pull/42 (draft)
+
+done in 6m 12s.
+
+  PR:        https://github.com/you/your-repo/pull/42
+  dashboard: http://127.0.0.1:8765  (still running)
+
+  Ctrl-C to stop the dashboard.
+```
+
+Without a terminal attached — a script, a CI job — nothing blocks: the run prints how to reopen the
+dashboard and exits.
 
 ## Where the target's code runs
 
@@ -97,6 +113,8 @@ docker` requires the container.
 | `--sandbox {auto,local,docker}` | Where candidate code runs |
 | `--no-pr` | Build the branch locally, push nothing |
 | `--resume` | Continue the last `go` run on that repository |
+| `--no-dashboard` | Do not serve the live tree (it is served, and held open afterwards, by default) |
+| `--no-open` | Serve the dashboard but open no browser tab, for the PR or for the dashboard |
 
 ## When it stops
 

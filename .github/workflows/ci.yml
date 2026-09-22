@@ -1,9 +1,8 @@
 name: tests
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  push:                 # every branch, not just main: an unmerged branch that never builds is how
+  pull_request:         # 2,900 lines once reached `origin` without a single CI run
   workflow_dispatch:
 
 jobs:

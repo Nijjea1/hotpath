@@ -1,0 +1,27 @@
+# Local GPU run (RTX 5060) with real models: OpenAI planner + Baseten worker.
+# Substitute for the H100 path when no H100 is reachable. Bundled TinyGPT
+# stand-in, not the real Dryft model. Metric is tokens/sec (higher is better).
+name: torch_transformer_local_baseten
+target: ../targets/torch_transformer
+test_cmd: python tests/check.py
+bench_cmd: python bench.py
+profile_cmd: python hotprofile.py
+editable: ["model.py", "kernels/*.py"]
+locked: ["tests/*", "bench.py", "hotprofile.py"]
+timeouts: {test: 600, bench: 1200, profile: 300, model: 180}
+benchmark: {min_speedup: 1.03, noise_multiplier: 2.0, baseline_repeats: 3, exclusive: true, rebenchmark_parent: true, required_workloads: [p32_b1, p32_b2, p160_b1, p160_b2], min_workload_retention: 0.98}
+search: {iterations: 1, candidates_per_iteration: 3, max_parallel_tests: 2, max_parallel_workers: 3, max_parallel_benchmarks: 1, max_patch_retries: 1}
+strategies:
+  - "gpu: preallocate the KV cache to max length and write into it in place instead of torch.cat"
+  - "gpu: remove the .tolist() CPU sync from token selection; keep the next token on device"
+  - "gpu: compute the causal mask once per step instead of torch.tril each forward"
+  - "gpu: use F.scaled_dot_product_attention for the attention math"
+provider:
+  planner: openai
+  planner_model: gpt-4.1
+  planner_api_key_env: OPENAI_API_KEY
+  worker: openai
+  worker_model: moonshotai/Kimi-K2.7-Code
+  worker_base_url: https://inference.baseten.co/v1
+  worker_api_key_env: BASETEN_API_KEY
+execution: {backend: local}
