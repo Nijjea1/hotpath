@@ -534,7 +534,11 @@ class Go:
             r = results[0]
             why = "timed out" if r.timed_out else f"exited {r.returncode}"
             raise GoStop(f"the tests fail on the untouched code ({why}), so there is nothing to prove a change "
-                         f"against. Fix them first. Last output:\n{(r.stdout + r.stderr)[-2500:]}")
+                         f"against. Fix them first, or point Hotpath at a subset that does pass with "
+                         f"--test-cmd (optional-dependency tests are the usual culprit, e.g. "
+                         f"--test-cmd 'python -m pytest -q -m \"not external\"'). Whatever you choose becomes "
+                         f"the locked definition of correct, and the pull request says so. Last output:\n"
+                         f"{(r.stdout + r.stderr)[-2500:]}")
         if len(passed) != len(results):
             raise GoStop(f"the tests are flaky: {len(passed)} of {len(results)} runs passed on the same code. "
                          "Hotpath would reject good changes at random; fix or skip the flaky tests "

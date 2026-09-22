@@ -93,3 +93,41 @@ def test_cli_assess_json(tmp_path, capsys):
     repo = write(tmp_path, {"m.py": "", "test_m.py": "def test_m(): pass\n"})
     assert main(["assess", str(repo), "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["ecosystem"] == "python"
+
+
+def test_setup_py_test_extras_are_found_through_a_variable(tmp_path):
+    """The real shape that broke a live run: the extras dict is built above `setup()` and passed by
+    name, so `extras_require=` never appears next to a literal. Missing the test extras means the
+    baseline suite cannot import and the whole run stops."""
+    repo = write(tmp_path, {
+        "lib/__init__.py": "", "lib/a.py": "",
+        "tests/test_a.py": "def test_a(): pass\n",
+        "setup.py": "from setuptools import setup\n\n"
+                    "extras = {\n"
+                    "    'benchmark': ['tabulate'],\n"
+                    "    'test': ['hypothesis', 'numpy'],\n"
+                    "    'lint': ['flake8'],\n"
+                    "}\n\n"
+                    "setup(name='lib', install_requires=['attrs'], extras_require=extras)\n"})
+    a = assess(repo)
+    assert a.dependencies == ["hypothesis", "numpy", "attrs"]   # test extras yes, benchmark/lint no
+    assert not any("computes its dependencies" in n for n in a.notes)
+
+
+def test_setup_cfg_declares_requirements(tmp_path):
+    repo = write(tmp_path, {
+        "lib/__init__.py": "", "lib/a.py": "",
+        "tests/test_a.py": "def test_a(): pass\n",
+        "setup.cfg": "[options]\ninstall_requires =\n    attrs\n    click>=8\n\n"
+                     "[options.extras_require]\ntesting =\n    pytest-mock\ndocs =\n    sphinx\n"})
+    a = assess(repo)
+    assert a.dependencies == ["pytest-mock", "attrs", "click>=8"]
+
+
+def test_unparseable_setup_py_still_assesses(tmp_path):
+    repo = write(tmp_path, {
+        "lib/__init__.py": "", "lib/a.py": "",
+        "tests/test_a.py": "def test_a(): pass\n",
+        "setup.py": "this is not python(\n"})
+    a = assess(repo)
+    assert a.tier == 1 and a.dependencies == []

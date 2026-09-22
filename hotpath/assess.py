@@ -13,6 +13,8 @@ timing of an existing command. Tier 0 is unsupported and stops the guided flow w
 """
 from __future__ import annotations
 
+import ast
+import configparser
 import json
 import re
 import subprocess
@@ -178,6 +180,56 @@ def requirement_lines(path: Path, seen: set[Path] | None = None) -> list[str]:
     return out
 
 
+def setup_py_requirements(source: str) -> tuple[list[str], list[str]]:
+    """(install_requires, test extras) read out of setup.py with `ast` — parsed, never executed.
+
+    A regex over `extras_require=` misses the common case, because projects build the dict above the
+    `setup()` call and pass the variable (`extras_require=extras`). So instead: walk every dict literal
+    in the file and take the lists under a test-ish key. Test dependencies matter as much as runtime
+    ones here — without them the baseline suite fails to import and the whole run stops."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return [], []
+
+    def strings(node: ast.AST) -> list[str]:
+        if not isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+            return []
+        return [e.value for e in node.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+
+    install: list[str] = []
+    extras: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.keyword) and node.arg == "install_requires":
+            install += strings(node.value)
+        elif isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                if isinstance(key, ast.Constant) and isinstance(key.value, str) \
+                        and key.value.strip().lower() in _TEST_EXTRAS:
+                    extras += strings(value)
+    return install, extras
+
+
+def setup_cfg_requirements(path: Path) -> tuple[list[str], list[str]]:
+    """(install_requires, test extras) from setup.cfg's `[options]` and `[options.extras_require]`."""
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(path, encoding="utf-8")
+    except (configparser.Error, OSError, UnicodeDecodeError):
+        return [], []
+
+    def lines(raw: Optional[str]) -> list[str]:
+        return [ln.strip() for ln in (raw or "").splitlines() if ln.strip() and not ln.strip().startswith("#")]
+
+    install = lines(parser.get("options", "install_requires", fallback=""))
+    extras: list[str] = []
+    if parser.has_section("options.extras_require"):
+        for key in parser.options("options.extras_require"):
+            if key.strip().lower() in _TEST_EXTRAS:
+                extras += lines(parser.get("options.extras_require", key))
+    return install, extras
+
+
 def python_dependencies(repo: Path) -> tuple[list[str], list[str], Optional[str], list[str]]:
     """(specs, requirement files used, requires-python, notes)."""
     notes: list[str] = []
@@ -205,13 +257,17 @@ def python_dependencies(repo: Path) -> tuple[list[str], list[str], Optional[str]
         if (repo / rel).is_file():
             files.append(rel)
             specs += requirement_lines(repo / rel)
+    cfg_install, cfg_extras = setup_cfg_requirements(repo / "setup.cfg")
+    specs += cfg_extras
     setup_py = _read(repo / "setup.py")
-    if setup_py and not project.get("dependencies"):
-        m = re.search(r"install_requires\s*=\s*\[(.*?)\]", setup_py, re.S)
-        if m:
-            specs += re.findall(r"['\"]([^'\"]+)['\"]", m.group(1))
-            notes.append("dependencies were read from setup.py's install_requires by pattern; check them")
-        elif not files:
+    py_install, py_extras = setup_py_requirements(setup_py) if setup_py else ([], [])
+    specs += py_extras
+    if not project.get("dependencies"):
+        specs += cfg_install
+        if py_install:
+            specs += py_install
+            notes.append("dependencies were read from setup.py by parsing it; check them")
+        elif setup_py and not files and not cfg_install and not py_extras:
             notes.append("setup.py computes its dependencies; if the baseline tests fail to import, add a "
                          "requirements.txt")
     seen, unique = set(), []
