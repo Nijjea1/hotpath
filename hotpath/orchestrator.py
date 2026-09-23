@@ -239,6 +239,9 @@ class Orchestrator:
                 e.set_status(ExperimentStatus.not_selected,
                              f"correct and {e.comparison.speedup_vs_parent:.3f}x faster, but not in the top-{cfg.search.beam_width} beam; may be re-proposed on a surviving head")
                 self.store.save_experiment(e)
+                # The verdict line already said [accepted]; without this the run log implies it shipped.
+                run.log(f"{e.id} [not_selected] passed but not kept: {e.comparison.speedup_vs_baseline:.3f}x vs baseline "
+                        f"is outside the top-{cfg.search.beam_width} beam")
         # Every surviving head needs a profile for the next iteration's planning.
         for nd in new_beam:
             if nd.profile is None:

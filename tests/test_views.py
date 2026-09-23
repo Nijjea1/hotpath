@@ -180,7 +180,7 @@ def test_baseline_is_head_until_something_is_accepted():
     b.add(1, ExperimentStatus.rejected_speed, median=1.0)
     tree = build_tree(b.run, b.exps)
     base = next(n for n in tree.nodes if n.id == BASELINE_ID)
-    assert base.is_head and base.on_head_chain and base.subtitle.endswith("seconds")
+    assert base.is_head and base.on_head_chain and base.subtitle.endswith(("s", "ms", "µs"))
 
 
 def test_empty_run_still_yields_a_baseline_node():

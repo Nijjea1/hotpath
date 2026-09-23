@@ -81,6 +81,7 @@ main{max-width:1608px;margin:auto;padding:42px 24px 80px;display:grid;gap:24px}
 #tree .node.head rect{stroke:var(--hot);stroke-width:2}
 #tree .node.expanded rect{stroke-width:2}
 #tree .node.selected rect{filter:brightness(1.4)}
+#tree .node rect.backing{fill:var(--panel);stroke:none;filter:none}
 #tree text{font-size:12px;fill:var(--ink);pointer-events:none}
 #tree text.sub{font-size:11px;fill:var(--muted);font-family:var(--mono)}
 #tree text.meta{font-size:10px;fill:var(--dim);font-family:var(--mono)}
@@ -142,7 +143,7 @@ tr.row.isretry td:first-child{border-left:2px solid var(--ai)}
 .bnhead .box{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
 .bnhead .lbl{font-size:11px;color:var(--muted)}
 .bnhead .val{font-family:var(--mono);font-size:15px}
-.bnrow{display:grid;grid-template-columns:minmax(90px,170px) minmax(0,1fr) 74px;gap:10px;align-items:center;padding:3px 0}
+.bnrow{display:grid;grid-template-columns:minmax(90px,170px) minmax(0,1fr) 96px;gap:10px;align-items:center;padding:3px 0}
 .bnrow .nm{font-family:var(--mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bnrow .nm.ro{color:var(--muted)}
 .bnbars{display:grid;gap:2px}
@@ -289,7 +290,25 @@ function fmtMetric(v) {
   if (a >= 1) return v.toFixed(3);
   return v.toFixed(5);
 }
-function fmtSeconds(v) { return v == null ? "–" : (Math.abs(v) >= 1 ? v.toFixed(3) : v.toFixed(4)) + "s"; }
+// A measured value in its metric's own unit, at three significant figures (mirrors views.format_value).
+function fmtValue(v, metric) {
+  if (v == null || !isFinite(v)) return "–";
+  const sig = x => Math.abs(x) >= 1000 ? x.toFixed(0) : Number(x.toPrecision(3)).toString();
+  if (metric !== "seconds") return `${sig(v)} ${metric || ""}`.trim();
+  const a = Math.abs(v);
+  return a >= 1 ? sig(v) + " s" : a >= 1e-3 ? sig(v * 1e3) + " ms" : sig(v * 1e6) + " µs";
+}
+// Speedups to two decimals: the bootstrap CIs are wider than a hundredth, so a third digit is noise.
+const fmtX = x => x == null || !isFinite(x) ? "–" : Number(x).toFixed(2) + "×";
+function fmtSeconds(v) { return v == null ? "–" : v === 0 ? "0" : fmtValue(v, "seconds"); }
+// Axis ticks on round steps (1, 2, 2.5, 5 × 10^k) so gridlines land on readable values.
+function niceTicks(lo, hi, count = 4) {
+  const raw = (hi - lo) / count || 1, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+  const start = Math.floor(lo / step) * step, end = Math.ceil(hi / step) * step;
+  const ticks = []; for (let v = start; v <= end + step / 2; v += step) ticks.push(+v.toPrecision(12));
+  return {lo: start, hi: end, ticks, decimals: Math.max(0, -Math.floor(Math.log10(step) + 1e-9) + (step / mag === 2.5 ? 1 : 0))};
+}
 
 // localStorage can throw (private windows, blocked site data) and must never break a render.
 function remember(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
@@ -354,7 +373,7 @@ async function refreshViews(data) {
 async function loadRuns() {
   const runs = await getJSON("/api/runs");
   const sel = $("#runSel"); const cur = state.runId || sel.value;
-  sel.replaceChildren(...runs.map(r => new Option(`${r.id} · ${r.config_name} · ${r.status} · ${fmt(r.best_speedup,2)}x`, r.id)));
+  sel.replaceChildren(...runs.map(r => new Option(runLabel(r), r.id)));
   if (cur && [...sel.options].some(o => o.value === cur)) sel.value = cur;
   sel.onchange = () => selectRun(sel.value);
 }
@@ -443,20 +462,31 @@ function render() {
   renderBottleneck(); renderProfile(run); renderFunnel(); renderContract(d.config); renderDetail(run, exps);
   $("#runlog").textContent = run.logs.slice(-80).join("\n"); $("#runlog").scrollTop = 1e9;
   const sel = $("#runSel"); const opt = [...sel.options].find(o => o.value === run.id);
-  if (opt) opt.textContent = `${run.id} · ${run.config_name} · ${run.status} · ${fmt(run.best_speedup,2)}x`;
+  if (opt) opt.textContent = runLabel(run);
 }
+// A run with no kept change reports best_speedup 1.0; "1.00×" would read like a measured result.
+const runLabel = r => `${r.id} · ${r.config_name} · ${r.status} · ${r.head_experiment_id ? fmtX(r.best_speedup) : "no change kept"}`;
 
 function renderStats(run, exps) {
   const b = run.baseline_benchmark, h = run.head_benchmark;
   const unit = b ? b.metric : "";
-  const acc = exps.filter(e => e.status === "accepted").length, rej = exps.filter(e => REJECTED.has(e.status)).length;
+  const head = run.head_experiment_id ? exps.find(e => e.id === run.head_experiment_id) : null;
+  // The only interval Hotpath measures is candidate-vs-parent. It is also a baseline-relative interval
+  // only when the head's parent *is* the baseline; across a longer chain no such interval exists.
+  const hc = head && head.comparison;
+  const speedSub = !head ? "no change passed both gates"
+    : !head.parent_id && hc && hc.ci_low != null ? `vs baseline · ${fmt((hc.confidence ?? 0.95) * 100, 0)}% CI ${fmt(hc.ci_low, 2)}–${fmt(hc.ci_high, 2)}×`
+    : "vs baseline · point estimate across a multi-step chain";
+  // Same definitions as the Funnel card, so the two can never disagree.
+  const f = state.funnel;
+  const rej = exps.filter(e => REJECTED.has(e.status)).length;
   const thr = state.chart && state.chart.noise_band ? state.chart.threshold_speedup : null;
   $("#stats").innerHTML = [
-    ["Baseline", b ? fmt(b.median, 5) : "–", unit + (b ? ` · ${b.n} samples` : "")],
-    ["Current head", h ? fmt(h.median, 5) : "–", unit + (run.head_experiment_id ? " · " + run.head_experiment_id : " · baseline")],
-    ["Speedup", fmt(run.best_speedup, 3) + "x", "vs baseline", "hot"],
-    ["Accepted / rejected", `${acc} / ${rej}`, `${exps.length} experiments`],
-    ["Noise floor", b ? (run.baseline_noise_cv * 100).toFixed(2) + "%" : "–", `run-to-run CV · threshold ${thr ? thr.toFixed(3) + "x" : "–"}`],
+    ["Baseline", b ? fmtValue(b.median, unit) : "–", b ? `median of ${b.n} samples · ${run.baseline_runs.length} runs` : ""],
+    ["Current head", h ? fmtValue(h.median, unit) : "–", run.head_experiment_id ? run.head_experiment_id : "unchanged baseline"],
+    ["Speedup", head ? fmtX(run.best_speedup) : "none", speedSub, "hot"],
+    ["Shipped", f ? String(f.shipped) : "–", f ? `${f.accepted} accepted · ${rej} rejected · ${f.attempts} attempts` : ""],
+    ["Noise floor", b ? (run.baseline_noise_cv * 100).toFixed(1) + "%" : "–", `run-to-run CV · keep bar ${thr ? fmtX(thr) : "–"}`],
   ].map(([l, v, s, c]) => `<div class="stat ${c||""}"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div><div class="sub">${esc(s)}</div></div>`).join("");
 }
 
@@ -496,7 +526,9 @@ function renderTree() {
     ].filter(Boolean).join(" · ");
     const tip = [n.title, n.status, n.reject_reason].filter(Boolean).join(" — ");
     out += `<g class="node ${esc(cls)}" data-id="${esc(n.id)}" transform="translate(${p.x},${p.y})"><title>${esc(tip)}</title>`
-      + `<rect width="${W}" height="${H}" rx="6"/>`
+      // Node fills are translucent tints, so an opaque backing keeps edges that pass behind a
+      // node (a lineage line skipping a column) from showing through its text.
+      + `<rect class="backing" width="${W}" height="${H}" rx="6"/><rect width="${W}" height="${H}" rx="6"/>`
       + `<text x="10" y="19">${esc(title)}</text>`
       + `<text class="sub" x="10" y="36">${esc(n.subtitle)}</text>`
       + (meta ? `<text class="meta" x="10" y="50">${esc(meta)}</text>` : "")
@@ -566,20 +598,23 @@ function renderChart() {
     lo = 0; hi = Math.max(...vals) * 1.08;
   }
   if (!(hi > lo)) { hi = lo + 1; }
+  const nice = niceTicks(lo, hi);
+  lo = mode === "raw" && !hib ? Math.max(0, nice.lo) : nice.lo; hi = nice.hi;
 
   const L = 62, R = 14, T = 12, B = 30;
   const n = Math.max(c.points.length, 2);
   const X = i => L + (w - L - R) * (i / (n - 1));
   const Y = v => T + (h - T - B) * (1 - (v - lo) / (hi - lo));
-  const label = v => mode === "raw" ? fmtMetric(v) : v.toFixed(2) + "x";
+  const tickLabel = v => mode === "raw" ? (c.metric === "seconds" ? fmtSeconds(v) : fmtMetric(v)) : v.toFixed(nice.decimals) + "×";
+  const label = v => mode === "raw" ? (c.metric === "seconds" ? fmtSeconds(v) : fmtMetric(v)) : fmtX(v);
 
   // grid + ticks
   ctx.strokeStyle = css("--line"); ctx.fillStyle = css("--muted");
   ctx.font = "11px " + css("--mono"); ctx.lineWidth = 1;
-  for (let t = 0; t <= 4; t++) {
-    const v = lo + (hi - lo) * t / 4;
+  for (const v of nice.ticks) {
+    if (v < lo) continue;
     ctx.beginPath(); ctx.moveTo(L, Y(v)); ctx.lineTo(w - R, Y(v)); ctx.stroke();
-    ctx.fillText(label(v), 4, Y(v) + 4);
+    ctx.fillText(tickLabel(v), 4, Y(v) + 4);
   }
 
   // iteration separators
@@ -653,7 +688,7 @@ function renderChart() {
   });
 
   const notes = [];
-  if (band) notes.push(`Shaded band is a ${band.threshold_speedup.toFixed(3)}x threshold reference around baseline (noise CV ${(band.noise_cv*100).toFixed(2)}%), not a confidence interval. Each verdict compares the candidate against its own parent.`);
+  if (band) notes.push(`Shaded band is the ${fmtX(band.threshold_speedup)} keep bar drawn around baseline (noise CV ${(band.noise_cv*100).toFixed(1)}%), not a confidence interval. Each verdict compares the candidate against its own parent.`);
   else notes.push("Historical threshold settings are unknown; no threshold band is shown.");
   notes.push(mode === "raw" ? "Faint dots are the individual benchmark samples. Red ticks are experiments that never reached a benchmark."
                             : "Parent-relative confidence intervals appear in experiment details. Red ticks never reached a benchmark.");
@@ -668,8 +703,8 @@ function renderTable(exps) {
     <td class="mono">${num[e.id] || ""}</td><td>${e.iteration}</td>
     <td>${esc(e.hypothesis.idea)}<div class="hint">${esc(hypFiles(e).join(", "))}${e.retry_of ? ` · ↻ retry of ${esc(num[e.retry_of] || e.retry_of)}` : ""}</div></td>
     <td><span class="badge b-${kind(e.status)}">${esc(e.status)}</span></td>
-    <td class="mono">${e.comparison ? fmt(e.comparison.speedup_vs_parent) + "x" : "–"}</td>
-    <td class="mono">${e.comparison ? fmt(e.comparison.speedup_vs_baseline) + "x" : "–"}</td>
+    <td class="mono" title="${e.comparison ? esc(e.comparison.reason) : ""}">${e.comparison ? fmtX(e.comparison.speedup_vs_parent) : "–"}</td>
+    <td class="mono ${e.status === "accepted" ? "" : "hint"}" title="${e.comparison && e.status !== "accepted" ? "measured, but this change was not kept" : ""}">${e.comparison ? fmtX(e.comparison.speedup_vs_baseline) : "–"}</td>
     <td class="hint">${esc(trunc(e.reject_reason || (e.status === "accepted" ? "correct and faster: new head" : ""), 90))}</td></tr>`).join("");
   document.querySelectorAll("#expTable .row").forEach(r => r.onclick = () => { state.selected = r.dataset.id; render(); });
   const f = state.funnel;
@@ -715,8 +750,8 @@ function renderBottleneck() {
   el.innerHTML =
     `<div class="bnhead">
       <div class="box"><div class="lbl">total self time</div><div class="val">${fmtSeconds(d.before_total)} → ${fmtSeconds(d.after_total)}</div></div>
-      <div class="box"><div class="lbl">profile ratio</div><div class="val">${d.total_ratio ? d.total_ratio.toFixed(2) + "x" : "–"}</div></div>
-      <div class="box"><div class="lbl">benchmark says</div><div class="val">${d.benchmark_speedup ? d.benchmark_speedup.toFixed(3) + "x" : "–"}</div></div>
+      <div class="box"><div class="lbl">profile ratio</div><div class="val">${d.total_ratio ? fmtX(d.total_ratio) : "–"}</div></div>
+      <div class="box"><div class="lbl">benchmark says</div><div class="val">${d.benchmark_speedup ? fmtX(d.benchmark_speedup) : "–"}</div></div>
     </div>`
     + (d.coherence_warning ? `<div class="verdict wait">${esc(d.coherence_warning)}</div>` : "")
     + rows.map(r => {
@@ -841,8 +876,8 @@ function renderDetail(run, exps) {
   if (state.selected === "baseline") {
     const b = run.baseline_benchmark;
     el.innerHTML = `<div class="verdict"><b>Baseline</b>Measured ${run.baseline_runs.length} separate benchmark runs of the untouched code. Progress uses this baseline; each acceptance verdict compares against its parent.</div>
-      <dl class="kv"><dt>commit</dt><dd class="mono">${esc(run.base_commit.slice(0,10))}</dd><dt>median</dt><dd class="mono">${b ? fmt(b.median,5) + " " + esc(b.metric) : "–"}</dd>
-      <dt>run medians</dt><dd class="mono">${run.baseline_runs.map(x => fmt(x,5)).join(", ")}</dd><dt>noise CV</dt><dd class="mono">${(run.baseline_noise_cv*100).toFixed(2)}%</dd></dl>
+      <dl class="kv"><dt>commit</dt><dd class="mono">${esc(run.base_commit.slice(0,10))}</dd><dt>median</dt><dd class="mono">${b ? esc(fmtValue(b.median, b.metric)) : "–"}</dd>
+      <dt>run medians</dt><dd class="mono">${esc(run.baseline_runs.map(x => fmtValue(x, b ? b.metric : "seconds")).join(", "))}</dd><dt>noise CV</dt><dd class="mono">${(run.baseline_noise_cv*100).toFixed(1)}%</dd></dl>
       ${b ? spark(b.samples) : ""}`;
     return;
   }
@@ -865,10 +900,10 @@ function renderDetail(run, exps) {
     <div class="section">Planner rationale</div><div>${esc(e.hypothesis.rationale)}</div>
     ${e.reasoning ? `<div class="section">Worker reasoning</div><div>${esc(e.reasoning)}</div>` : ""}
     ${b ? `<div class="section">Benchmark (${esc(b.metric)}, ${b.higher_is_better ? "higher" : "lower"} is better)</div>
-      <div class="bench"><div class="box"><div class="lbl">${e.parent_benchmark ? "decision parent median" : "stored parent median (decision measurement unavailable)"}</div><div class="val">${parentBench ? fmt(parentBench.median,5) : "–"}</div></div>
-      <div class="box"><div class="lbl">candidate median</div><div class="val">${fmt(b.median,5)}</div></div>
-      ${c ? `<div class="box"><div class="lbl">speedup vs parent</div><div class="val">${fmt(c.speedup_vs_parent)}x</div></div>
-      <div class="box"><div class="lbl">${c.confidence != null ? fmt(c.confidence * 100, 0) + "% " : ""}CI vs parent · threshold</div><div class="val">[${fmt(c.ci_low,2)}, ${fmt(c.ci_high,2)}] · ${fmt(c.threshold,3)}x</div></div>` : `<div class="hint">Comparison unavailable; no acceptance verdict yet.</div>`}</div>
+      <div class="bench"><div class="box"><div class="lbl">${e.parent_benchmark ? "decision parent median" : "stored parent median (decision measurement unavailable)"}</div><div class="val">${parentBench ? esc(fmtValue(parentBench.median, b.metric)) : "–"}</div></div>
+      <div class="box"><div class="lbl">candidate median</div><div class="val">${esc(fmtValue(b.median, b.metric))}</div></div>
+      ${c ? `<div class="box"><div class="lbl">speedup vs parent</div><div class="val">${fmtX(c.speedup_vs_parent)}</div></div>
+      <div class="box"><div class="lbl">${c.confidence != null ? fmt(c.confidence * 100, 0) + "% " : ""}CI vs parent · keep bar</div><div class="val">${fmt(c.ci_low,2)}–${fmt(c.ci_high,2)}× · ${fmtX(c.threshold)}</div></div>` : `<div class="hint">Comparison unavailable; no acceptance verdict yet.</div>`}</div>
       <div class="hint">candidate samples (n=${b.n}, CV ${(b.cv*100).toFixed(1)}%)</div>${spark(b.samples)}` : ""}
     ${e.correctness ? `<div class="section">Correctness (${e.correctness.passed ? "passed" : "failed"} · exit ${e.correctness.exit_code} · ${e.correctness.duration_s.toFixed(1)}s)</div><pre>${esc(e.correctness.output_tail.split("\n").slice(-14).join("\n"))}</pre>` : ""}
     ${e.diff ? `<div class="section">Diff (${esc(e.files_changed.join(", "))})</div><pre class="diff">${diffHtml(e.diff)}</pre>` : e.edits.length ? `<div class="section">Proposed edits (not applied)</div><pre>${esc(e.edits.map(x => `--- ${x.file}\n- ${x.search}\n+ ${x.replace}`).join("\n\n"))}</pre>` : ""}

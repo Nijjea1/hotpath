@@ -39,6 +39,16 @@ FALLBACK_NOISE_MULTIPLIER = 2.0
 NodeKind = Literal["baseline", "accepted", "not_selected", "rejected", "pending"]
 
 
+def format_value(value: float, metric: str) -> str:
+    """A metric value at a precision its measurement supports: seconds in s/ms/µs to three
+    significant figures, anything else (tokens/sec, …) to three significant figures in its own unit."""
+    if metric == "seconds":
+        a = abs(value)
+        scaled, unit = (value, "s") if a >= 1 else (value * 1e3, "ms") if a >= 1e-3 else (value * 1e6, "µs")
+        return f"{scaled:.3g} {unit}" if abs(scaled) < 1000 else f"{scaled:.0f} {unit}"
+    return f"{value:.3g} {metric}" if abs(value) < 1000 else f"{value:.0f} {metric}"
+
+
 def node_kind(status: ExperimentStatus) -> NodeKind:
     if status == ExperimentStatus.accepted:
         return "accepted"
@@ -176,7 +186,7 @@ def build_tree(run: RunState, exps: list[Experiment], cfg: HotpathConfig | None 
         expanded_at=sorted(expanded.get(BASELINE_ID, set())),
         on_head_chain=True, is_head=not head_chain,
         title="Baseline",
-        subtitle=f"{bench.median:.5f} {bench.metric}" if bench else "measuring…",
+        subtitle=format_value(bench.median, bench.metric) if bench else "measuring…",
         raw_median=bench.median if bench else None,
     )]
     for e in exps:
@@ -233,7 +243,7 @@ def _retry_chain(node_id: str, retries_of: dict[str, list[str]]) -> list[str]:
 
 def _node_subtitle(e: Experiment) -> str:
     c = e.comparison
-    sp = f"{c.speedup_vs_parent:.3f}x" if c else ""
+    sp = f"{c.speedup_vs_parent:.2f}x" if c else ""
     if e.status == ExperimentStatus.accepted:
         return f"✓ {sp} · {c.speedup_vs_baseline:.2f}x base" if c else "✓ accepted"
     if e.status == ExperimentStatus.not_selected:
