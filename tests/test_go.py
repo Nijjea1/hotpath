@@ -161,6 +161,27 @@ def test_go_refuses_local_execution_without_consent(tmp_path):
     assert code == 1 and "no consent to run locally" in out
 
 
+def test_local_baseline_runner_uses_tree_safe_process_runner(tmp_path, monkeypatch):
+    """The guided baseline must use the same timeout/tree cleanup as the harness."""
+    from hotpath import runner
+    from hotpath.sandbox import TargetEnv, make_runner
+
+    seen = {}
+
+    async def fake(cmd, cwd, timeout, env=None, output_limit=1048576):
+        from hotpath.schema import CmdResult
+        seen.update(cmd=cmd, cwd=cwd, timeout=timeout, env=env, output_limit=output_limit)
+        return CmdResult(cmd=cmd, exit_code=-9, stdout="partial", stderr="", duration_s=0.25,
+                         timed_out=True)
+
+    monkeypatch.setattr(runner, "run_cmd", fake)
+    result = make_runner(TargetEnv("venv", sys.executable, {"VIRTUAL_ENV": "test"}))(
+        "python tests/check.py", tmp_path, 3.0)
+    assert result.timed_out and result.returncode == -9 and result.stdout == "partial"
+    assert seen == {"cmd": "python tests/check.py", "cwd": tmp_path, "timeout": 3.0,
+                    "env": {"VIRTUAL_ENV": "test"}, "output_limit": 1048576}
+
+
 def test_go_on_a_local_checkout_restores_the_users_branch(tmp_path):
     remote = make_remote(tmp_path)
     src = tmp_path / "src"

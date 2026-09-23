@@ -68,15 +68,15 @@ def make_runner(tenv: TargetEnv) -> Runner:
         return run_docker
 
     def run_local(cmd: str, cwd: Path, timeout: float) -> RunResult:
-        import time
-        t0 = time.perf_counter()
-        try:
-            r = subprocess.run(cmd, cwd=str(cwd), shell=True, env={**os.environ, **tenv.env}, capture_output=True,
-                               text=True, encoding="utf-8", errors="replace", timeout=timeout)
-        except subprocess.TimeoutExpired as e:
-            out = e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
-            return RunResult(124, out, f"timed out after {timeout:.0f}s", time.perf_counter() - t0, True)
-        return RunResult(r.returncode, r.stdout, r.stderr, time.perf_counter() - t0)
+        # Use the same process-group runner as the optimization harness.  A plain
+        # subprocess.run(..., shell=True, timeout=...) kills only the shell on timeout;
+        # grandchildren can survive and keep inherited pipes open indefinitely.
+        import asyncio
+
+        from hotpath.runner import run_cmd
+
+        r = asyncio.run(run_cmd(cmd, cwd, timeout, env=tenv.env))
+        return RunResult(r.exit_code, r.stdout, r.stderr, r.duration_s, r.timed_out)
     return run_local
 
 

@@ -12,6 +12,80 @@ TAIL_LINES = 60
 _WINDOWS = sys.platform == "win32"
 
 
+def _windows_descendants(root_pid: int) -> list[int]:
+    """Snapshot descendant PIDs before killing a Windows process tree.
+
+    ``taskkill /T`` can miss a grandchild when a short-lived launcher exits or
+    when a virtual-environment executable inserts another Python process. Keep
+    the snapshot so those descendants can be terminated explicitly afterward.
+    """
+    if not _WINDOWS:
+        return []
+    import ctypes
+    from ctypes import wintypes
+
+    class PROCESSENTRY32W(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", wintypes.LONG),
+            ("dwFlags", wintypes.DWORD), ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    kernel32.Process32FirstW.restype = wintypes.BOOL
+    kernel32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    kernel32.Process32NextW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x00000002, 0)  # TH32CS_SNAPPROCESS
+    if snapshot == wintypes.HANDLE(-1).value:
+        return []
+    entry = PROCESSENTRY32W()
+    entry.dwSize = ctypes.sizeof(entry)
+    parents: dict[int, list[int]] = {}
+    try:
+        ok = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while ok:
+            parents.setdefault(int(entry.th32ParentProcessID), []).append(int(entry.th32ProcessID))
+            ok = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(snapshot)
+    descendants, pending = [], list(parents.get(root_pid, ()))
+    while pending:
+        pid = pending.pop()
+        descendants.append(pid)
+        pending.extend(parents.get(pid, ()))
+    return descendants
+
+
+def _windows_terminate(pid: int) -> bool:
+    """Terminate one same-user Windows process without spawning another shell."""
+    if not _WINDOWS:
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    kernel32.TerminateProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    handle = kernel32.OpenProcess(0x0001, False, pid)  # PROCESS_TERMINATE
+    if not handle:
+        return False
+    try:
+        return bool(kernel32.TerminateProcess(handle, 1))
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def tail(text: str, lines: int = TAIL_LINES) -> str:
     return "\n".join(text.strip().splitlines()[-lines:])
 
@@ -19,11 +93,14 @@ def tail(text: str, lines: int = TAIL_LINES) -> str:
 def _kill_tree(proc):
     try:
         if _WINDOWS:
-            result = subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-            # A missing taskkill or a race with process exit should not leave
-            # the asyncio child object running indefinitely.
-            if getattr(result, "returncode", 0) and proc.returncode is None:
+            descendants = _windows_descendants(proc.pid)
+            # Stop the root first so it cannot spawn more work, then terminate
+            # the captured tree from the leaves upward. Native handles avoid a
+            # taskkill subprocess that can itself hang in constrained runners.
+            root_stopped = _windows_terminate(proc.pid)
+            for pid in reversed(descendants):
+                _windows_terminate(pid)
+            if not root_stopped and proc.returncode is None:
                 try:
                     proc.kill()
                 except (ProcessLookupError, OSError):
@@ -81,6 +158,11 @@ async def run_process(command: str | list[str], cwd: Path, timeout: float,
                 task.cancel()
             await asyncio.gather(*readers, return_exceptions=True)
             out, err = b"", b""
+        # asyncio's Windows Proactor transport can otherwise survive until GC
+        # and emit an unclosed-pipe warning even though the process was reaped.
+        transport = getattr(proc, "_transport", None)
+        if transport is not None:
+            transport.close()
     if exceeded:
         err += b"\noutput limit exceeded"
     return CmdResult(cmd=command if isinstance(command, str) else " ".join(command),
