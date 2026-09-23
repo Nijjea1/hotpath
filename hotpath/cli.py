@@ -1,4 +1,4 @@
-"""hotpath go | assess | init | run [--pr] | pr | serve | ablate | export. The config defaults to the nearest .hotpath.yaml."""
+"""Hotpath command-line interface. Config commands default to the nearest .hotpath.yaml."""
 from __future__ import annotations
 
 import argparse
@@ -157,6 +157,11 @@ def cmd_assess(args: argparse.Namespace) -> int:
     return 0 if a.ok else 1
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from hotpath.doctor import run
+    return run(as_json=args.json, require_gpu=args.require_gpu)
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
     from server.app import create_app
@@ -236,6 +241,11 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="hotpath", description="AI proposes optimizations; Hotpath proves whether they work.")
     p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="cmd", required=True)
+    d = sub.add_parser("doctor", help="check Git, Docker, credentials, and CUDA/ROCm/XPU/MPS availability")
+    d.add_argument("--json", action="store_true")
+    d.add_argument("--require-gpu", action="store_true",
+                   help="fail unless PyTorch can use CUDA, ROCm, Intel XPU, or Apple MPS")
+    d.set_defaults(fn=cmd_doctor)
     i = sub.add_parser("init", help="set a repository up for Hotpath (.hotpath.yaml + CI check)")
     i.add_argument("path", nargs="?", default=".")
     i.add_argument("--test-cmd", help="command that checks correctness (exit 0 = correct)")
