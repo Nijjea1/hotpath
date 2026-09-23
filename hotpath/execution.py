@@ -61,6 +61,10 @@ def docker_create_args(cfg, image_id: str, stage: Path, name: str, command: str)
             "--env=PYTHONUNBUFFERED=1", "--env=PYTHONDONTWRITEBYTECODE=1", "--entrypoint=/bin/sh"]
     if cfg.gpu:
         args += ["--gpus", cfg.gpu]
+    for device in cfg.devices:
+        args += ["--device", device]
+    for group in cfg.group_add:
+        args += ["--group-add", group]
     if cfg.runtime:
         args += ["--runtime", cfg.runtime]
     return args + [image_id, "-c", command]
@@ -80,7 +84,8 @@ async def execution_metadata(cfg) -> dict:
         raise IsolationError("runner image declares writable VOLUMEs; use a reviewed image without VOLUME directives")
     return {"backend": "docker", "isolated": True, "image": cfg.image, "image_id": record["Id"],
             "repo_digests": record.get("RepoDigests", []), "runtime": cfg.runtime or "daemon-default",
-            "gpu": cfg.gpu, "cpus": cfg.cpus, "memory_mb": cfg.memory_mb,
+            "gpu": cfg.gpu, "devices": cfg.devices, "group_add": cfg.group_add,
+            "cpus": cfg.cpus, "memory_mb": cfg.memory_mb,
             "pids_limit": cfg.pids_limit, "network": "none"}
 
 

@@ -14,8 +14,9 @@ strategies:
   - "gpu: remove the .tolist() CPU sync from token selection; keep the next token on device"
   - "gpu: compute the causal mask once per step instead of torch.tril each forward"
   - "gpu: use F.scaled_dot_product_attention for the attention math"
-  - "gpu: torch.compile the block forward"
-  - "gpu: CUDA graphs for the single-token decode step"
+  - "gpu: use backend-portable torch.compile when supported and keep eager fallback"
+  - "gpu kernel: write a Triton kernel in kernels/ for CUDA or ROCm, dispatch only when its dtype/shape/stride preconditions hold, and retain the PyTorch fallback"
+  - "apple gpu: prefer MPS-supported fused PyTorch operations and retain CPU fallback for unsupported operators"
 provider:
   planner: mock
   worker: mock

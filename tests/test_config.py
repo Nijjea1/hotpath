@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from hotpath.config import config_snapshot
+from hotpath.config import config_snapshot, load_config
 from hotpath.schema import HotpathConfig
 
 
@@ -15,6 +15,9 @@ from hotpath.schema import HotpathConfig
     ("benchmark", {"min_speedup": float("nan")}),
     ("timeouts", {"test": 0}),
     ("execution", {"memory_mb": 0}),
+    ("execution", {"devices": ["C:\\gpu"]}),
+    ("execution", {"devices": ["/dev/dri,ro"]}),
+    ("execution", {"group_add": ["bad/group"]}),
     ("execution", {"network": True}),
 ])
 def test_invalid_config_rejected(cfg, field, value):
@@ -30,9 +33,25 @@ def test_execution_is_isolated_by_default(cfg):
     assert HotpathConfig.model_validate(raw).execution.backend == "docker"
 
 
+def test_config_accepts_utf8_bom_before_a_comment(tmp_path):
+    path = tmp_path / "bom.yaml"
+    path.write_text("\ufeff# Windows-authored config\nname: bom\ntarget: .\n"
+                    "test_cmd: python test.py\nbench_cmd: python bench.py\neditable: ['*.py']\n",
+                    encoding="utf-8")
+    assert load_config(path).name == "bom"
+
+
 def test_gpu_requires_exclusive_benchmarks(cfg):
     raw = cfg.model_dump()
     raw["execution"]["gpu"] = "device=0"
+    raw["benchmark"]["exclusive"] = False
+    with pytest.raises(ValidationError, match="exclusive"):
+        HotpathConfig.model_validate(raw)
+
+
+def test_device_passthrough_requires_exclusive_benchmarks(cfg):
+    raw = cfg.model_dump()
+    raw["execution"]["devices"] = ["/dev/dri"]
     raw["benchmark"]["exclusive"] = False
     with pytest.raises(ValidationError, match="exclusive"):
         HotpathConfig.model_validate(raw)

@@ -45,12 +45,16 @@ def torch_run(fn: Callable[[], object], *, top: int = 30) -> None:
     """Profile a torch workload; hotspots are kernel/op names with device time."""
     import torch
     from torch.profiler import ProfilerActivity, profile
+    from hotpath.benchlib import torch_backend, torch_device, torch_synchronize
 
-    acts = [ProfilerActivity.CPU] + ([ProfilerActivity.CUDA] if torch.cuda.is_available() else [])
+    device = torch_device(torch_module=torch)
+    backend = torch_backend(device, torch_module=torch)
+    accelerator_activity = (getattr(ProfilerActivity, "CUDA", None) if backend in {"cuda", "rocm"}
+                            else getattr(ProfilerActivity, "XPU", None) if backend == "xpu" else None)
+    acts = [ProfilerActivity.CPU] + ([accelerator_activity] if accelerator_activity is not None else [])
     with profile(activities=acts, record_shapes=False, with_stack=True) as prof:
         fn()
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
+        torch_synchronize(device, torch_module=torch)
     avgs = prof.key_averages()
 
     def _device_times(a):
@@ -60,11 +64,11 @@ def torch_run(fn: Callable[[], object], *, top: int = 30) -> None:
     # Prefer GPU kernel time, but fall back to CPU op time when device timing is unavailable
     # (e.g. CUPTI failed to initialize on this driver/GPU — common on Windows/WDDM and new
     # architectures). Without this fallback the whole profile is zeros and the planner is blind.
-    use_cuda = torch.cuda.is_available() and sum(_device_times(a)[0] for a in avgs) > 0.0
-    tool = "torch.profiler" if use_cuda else "torch.profiler (cpu-time fallback)"
+    use_device_time = accelerator_activity is not None and sum(_device_times(a)[0] for a in avgs) > 0.0
+    tool = f"torch.profiler ({backend} device time)" if use_device_time else f"torch.profiler ({backend}; cpu-time fallback)"
     rows, total = [], 0.0
     for a in avgs:
-        if use_cuda:
+        if use_device_time:
             self_t, tot_t = _device_times(a)
         else:
             self_t, tot_t = a.self_cpu_time_total, a.cpu_time_total
@@ -75,8 +79,8 @@ def torch_run(fn: Callable[[], object], *, top: int = 30) -> None:
     rows.sort(key=lambda r: r["self_time"], reverse=True)
     output = {"hotpath_profile": 1, "tool": tool, "total_time": total / 1e6,
               "n_functions_total": len(rows), "completeness_known": True,
-              "hotspots": rows[:top]}
-    if use_cuda:
+              "device": device, "backend": backend, "hotspots": rows[:top]}
+    if use_device_time:
         # CPU parentage does not reliably apportion asynchronous device work between parents. A
         # nested device-time graph would look precise while assigning kernel time to the wrong op.
         output["flamegraph_unavailable_reason"] = (

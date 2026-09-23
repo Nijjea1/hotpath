@@ -6,7 +6,7 @@ target: ../targets/torch_transformer
 test_cmd: python tests/check.py
 bench_cmd: python bench.py
 profile_cmd: python hotprofile.py
-editable: ["model.py"]
+editable: ["model.py", "kernels/*.py"]
 locked: ["tests/*", "bench.py", "hotprofile.py"]
 correctness_contract: "For fixed prompts, greedy tokens must exactly match the frozen reference and CUDA logits must pass tests/check.py tolerance. Preserve shapes, ordering, and exceptions."
 execution:

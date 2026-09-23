@@ -6,12 +6,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import torch  # noqa: E402
+from hotpath.benchlib import torch_backend, torch_device  # noqa: E402
 
 from model import build_model, generate, logits_for  # noqa: E402
 from reference_model import build_reference, ref_generate  # noqa: E402
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-ATOL = 1e-3 if DEVICE == "cuda" else 1e-4
+DEVICE = torch_device(torch_module=torch)
+BACKEND = torch_backend(DEVICE, torch_module=torch)
+ATOL = 1e-3 if DEVICE != "cpu" else 1e-4
 failures = 0
 
 model = build_model(seed=0, device=DEVICE)

@@ -34,6 +34,9 @@ as minimal search/replace edits. Rules:
 - For tensor or GPU code, preserve dtype, device, shape, aliasing, cache layout, mutation order, and decode semantics.
   Do not use an in-place update, a faster attention API, compilation, precision change, or a custom kernel unless the
   supplied source proves its preconditions. Keep a safe existing path when the optimization only applies to one case.
+- Custom kernels belong in a separate editable kernel file plus the smallest possible call-site edit. CUDA/Triton
+  kernels must state shape/stride/dtype/device preconditions and keep a correct PyTorch fallback. Do not emit CUDA-only
+  code for ROCm, XPU, MPS, or CPU paths; dispatch explicitly and let the harness test the selected backend.
 - Keep the change minimal and self-contained. Include imports if you add them (as a separate edit at the top).
 - Explain in `reasoning` why the change is faster and why it is safe."""
 

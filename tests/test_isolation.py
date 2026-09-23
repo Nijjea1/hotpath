@@ -22,6 +22,14 @@ def test_docker_security_arguments(tmp_path):
     assert not any("API_KEY" in arg for arg in args)
 
 
+def test_docker_supports_explicit_rocm_or_intel_devices(tmp_path):
+    cfg = ExecutionConfig(devices=["/dev/kfd", "/dev/dri"], group_add=["video", "render"])
+    args = docker_create_args(cfg, "sha256:fixed", tmp_path, "hotpath-test", "python test.py")
+    assert args.count("--device") == 2 and "/dev/kfd" in args and "/dev/dri" in args
+    assert args.count("--group-add") == 2 and "video" in args and "render" in args
+    assert "--gpus" not in args
+
+
 def test_stage_only_tracked_and_no_credentials(ws, tmp_path):
     from hotpath.workspace import _git
     wt = ws.create_worktree(ws.head(), "stage")

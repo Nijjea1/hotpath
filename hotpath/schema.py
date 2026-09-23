@@ -39,8 +39,9 @@ DEFAULT_STRATEGIES = [
     "io: avoid repeated file reads, syscalls, or allocations in hot loops",
     "gpu: preallocate buffers (e.g. KV cache) instead of growing tensors with torch.cat",
     "gpu: remove CPU-GPU sync points (.item(), .cpu(), print) from inner loops",
-    "gpu: torch.compile hot functions or fuse elementwise ops",
-    "gpu: CUDA graphs for the decode step",
+    "gpu: use backend-portable torch.compile or fused PyTorch operations when their preconditions hold",
+    "gpu kernel: add a minimal Triton kernel plus a safe PyTorch fallback for CUDA/ROCm",
+    "apple gpu: use MPS-supported PyTorch operations and retain a CPU fallback for unsupported operators",
 ]
 
 
@@ -117,7 +118,19 @@ class ExecutionConfig(ConfigModel):
     tmpfs_mb: int = Field(512, ge=1)
     output_limit_bytes: int = Field(1048576, ge=1024)
     gpu: Optional[str] = None
+    devices: list[str] = Field(default_factory=list,
+                               description="Linux device paths passed to Docker, e.g. /dev/kfd and /dev/dri for ROCm")
+    group_add: list[str] = Field(default_factory=list,
+                                 description="Supplemental container groups needed by accelerator devices")
     runtime: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_device_paths(self):
+        if any(not device.startswith("/dev/") or "," in device for device in self.devices):
+            raise ValueError("execution.devices entries must be absolute /dev paths without commas")
+        if any(not group or any(ch in group for ch in ",/\\") for group in self.group_add):
+            raise ValueError("execution.group_add entries must be group names or IDs")
+        return self
 
 
 class HotpathConfig(ConfigModel):
@@ -142,7 +155,7 @@ class HotpathConfig(ConfigModel):
 
     @model_validator(mode="after")
     def validate_shared_gpu(self):
-        if self.execution.gpu and not self.benchmark.exclusive:
+        if (self.execution.gpu or self.execution.devices) and not self.benchmark.exclusive:
             raise ValueError("GPU tests and benchmarks share the same device; benchmark.exclusive must be true")
         return self
 

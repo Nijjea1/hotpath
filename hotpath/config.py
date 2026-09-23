@@ -90,7 +90,10 @@ def load_env_files() -> list[Path]:
 
 def load_config(path: str | Path) -> HotpathConfig:
     p = Path(path)
-    raw = yaml.safe_load(p.read_text()) or {}
+    # utf-8-sig accepts ordinary UTF-8 and strips the BOM commonly written by
+    # Windows editors/PowerShell. A BOM before an initial YAML comment is
+    # otherwise parsed as scalar content and makes the following mapping fail.
+    raw = yaml.safe_load(p.read_text(encoding="utf-8-sig")) or {}
     cfg = HotpathConfig.model_validate(raw)
     # Resolve relative paths against the config file's directory.
     base = p.parent

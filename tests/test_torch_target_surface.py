@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from hotpath.config import load_config
+from hotpath.providers.prompts import PLANNER_SYSTEM, WORKER_SYSTEM
 from hotpath.schema import Edit
 from hotpath.workspace import LockedFileError, Workspace
 
@@ -33,3 +34,14 @@ def test_mock_patch_edits_called_kernel_and_cannot_edit_benchmark(tmp_path):
                            cfg.editable, cfg.locked)
     finally:
         ws.cleanup()
+
+
+def test_gpu_configs_and_prompts_allow_safe_kernel_authoring():
+    for name in ("torch_transformer.yaml", "torch_transformer_h100_openai.yaml",
+                 "dryft_local.yaml", "dryft_h100.yaml"):
+        cfg = load_config(ROOT / "configs" / name)
+        assert any("kernel" in pattern for pattern in cfg.editable), name
+        assert not any("kernel" in pattern for pattern in cfg.locked), name
+    assert "new Triton kernel module plus its call site" in PLANNER_SYSTEM
+    assert "correct PyTorch fallback" in WORKER_SYSTEM
+    assert "ROCm" in WORKER_SYSTEM and "MPS" in WORKER_SYSTEM
