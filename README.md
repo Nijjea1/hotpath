@@ -22,6 +22,9 @@ git clone https://github.com/Nijjea1/hotpath && cd hotpath
 
 hotpath.cmd https://github.com/you/your-repo        # Windows
 ./hotpath.sh https://github.com/you/your-repo       # macOS / Linux
+
+# Diagnose Git, Docker, credentials, PyTorch, and the active accelerator.
+hotpath doctor
 ```
 
 The wrapper creates `.venv`, installs Hotpath, and runs `hotpath go`: it clones your repo, works out how
@@ -112,6 +115,11 @@ hotpath ablate configs/demo_repo.yaml
 
 pytest -q
 ```
+
+Host and accelerator support (CUDA, ROCm, Intel XPU, Apple MPS, CPU, and Docker device
+passthrough) is documented in [`docs/PLATFORMS.md`](docs/PLATFORMS.md). Hotpath can write a custom
+kernel plus its dispatch/call-site edits when those paths are editable; every backend-specific path
+must retain a correct fallback and pass the locked correctness and workload gates.
 
 The bundled demo configs explicitly select `execution.backend: local` because the
 bundled target is trusted and is intended to run as a quick smoke test. For arbitrary
