@@ -128,7 +128,7 @@ function Docs() {
         <Section id="install" eyebrow="Get started" title="Install">
           <p>Hotpath is a Python package (Python 3.11+). Clone the repo and install it in editable mode:</p>
           <Code>{`git clone ${REPO_URL}.git
-cd HotPath
+cd hotpath
 pip install -e ".[dev]"`}</Code>
           <p>
             The demo configs run with an offline mock provider, so no API key is needed to see the

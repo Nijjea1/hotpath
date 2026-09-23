@@ -28,6 +28,8 @@ import {
   FLAME_NOTES,
   CONFIG_YAML,
   STATUS_LABEL,
+  RUN,
+  REPORT_URL,
 } from "../data/hotpath";
 import type { Experiment } from "../data/hotpath";
 import LoopDiagram from "../components/charts/LoopDiagram";
@@ -333,7 +335,7 @@ function Index() {
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <WordsReveal as="h2" className="text-3xl lg:text-4xl text-neutral-100 leading-tight block" text="Every rejection is recorded with its reason." step={0.06} />
             <p className="text-neutral-500 text-base shrink-0">
-              harness verdicts: <span className="text-emerald-400 font-medium">{TOTALS.shipped} kept</span> · {TOTALS.proposed - TOTALS.shipped} rejected
+              harness verdicts: <span className="text-emerald-400 font-medium">{TOTALS.shipped} shipped</span> · {TOTALS.proposed - TOTALS.shipped} not shipped
             </p>
           </div>
           <div className="flex flex-col gap-3 lg:gap-4">
@@ -412,7 +414,7 @@ function Index() {
             <div className="md:col-span-7">
               <p className="text-sm font-normal text-neutral-100 opacity-70 leading-5 max-w-[866px]">
                 <WordsReveal
-                  text={`Hotpath never accepts a change because a model says it is faster. Correctness is the exit code of a locked test command; speed is a bootstrap-CI decision against a machine-measured noise floor.${ILLUSTRATIVE ? " Run numbers on this page are illustrative, from the design run, and will be replaced with the measured H100 result." : ""} Planner: OpenAI API · workers: an OpenAI-compatible endpoint · traces: Sentry.`}
+                  text={`Hotpath never accepts a change because a model says it is faster. Correctness is the exit code of a locked test command; speed is a bootstrap-CI decision against a machine-measured noise floor.${ILLUSTRATIVE ? " Run numbers on this page are illustrative." : ` Run numbers on this page are from one measured run (${RUN.id}, ${RUN.date}): ${RUN.target} on an ${RUN.hardware}.`} Planner: OpenAI API · workers: an OpenAI-compatible endpoint · traces: Sentry.`}
                   step={0.02}
                   delay={2.3}
                   duration={0.4}
@@ -459,7 +461,7 @@ function GiantWordmark() {
 /* ------------------------------------------------------------ hero dashboard */
 
 const TRUST = EXPERIMENTS.find((e) => e.id === TRUST_ID)!;
-const ACCEPTED = EXPERIMENTS.filter((e) => e.status === "accepted");
+const ACCEPTED = EXPERIMENTS.filter((e) => e.shipped);
 const BEST = ACCEPTED[ACCEPTED.length - 1];
 
 function HeroDashboard({ show }: { show: boolean }) {
@@ -520,12 +522,12 @@ function HeroDashboard({ show }: { show: boolean }) {
           animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
           transition={{ duration: 0.36, delay: 0.26, ease: "easeOut" }}
         >
-          <span className="text-xs text-neutral-500 mb-3 uppercase tracking-wider">verdicts · {TOTALS.proposed} proposed</span>
+          <span className="text-xs text-neutral-500 mb-3 uppercase tracking-wider">verdicts · {TOTALS.proposed} attempts</span>
           <div className="flex flex-col gap-1.5">
             {OUTCOMES.map((o) => (
               <div key={o.label} className="flex items-center justify-between">
                 <span className="text-xs text-neutral-300 truncate">{o.label}</span>
-                <span className={`text-sm font-medium tabular-nums ${o.status === "accepted" ? "text-emerald-400" : o.status === "pruned" ? "text-neutral-400" : "text-red-400"}`}>
+                <span className={`text-sm font-medium tabular-nums ${o.status === "accepted" ? "text-emerald-400" : o.status === "superseded" ? "text-neutral-400" : "text-red-400"}`}>
                   {o.count}
                 </span>
               </div>
@@ -589,7 +591,7 @@ function PatchScan({ active }: { active: boolean }) {
   return (
     <div className="relative w-full h-full rounded-2xl bg-neutral-950 border border-white/10 overflow-hidden p-4 flex flex-col">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-neutral-500 uppercase tracking-wider">{TRUST.id} · {TRUST.speedup}× faster</span>
+        <span className="text-xs text-neutral-500 uppercase tracking-wider">{TRUST.id} · attempt {TRUST.n} of {TOTALS.proposed}</span>
         <span className="text-xs text-neutral-600 uppercase tracking-wider">model.py</span>
       </div>
       <pre className="text-[11px] sm:text-xs font-mono text-neutral-400 leading-relaxed overflow-hidden flex-1">{TRUST.diff}</pre>
@@ -635,7 +637,7 @@ function PatchScan({ active }: { active: boolean }) {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: "spring", stiffness: 400, damping: 14 }}
         >
-          REJECTED · OUTPUT CHANGED
+          REJECTED · TESTS FAILED
         </motion.div>
       )}
     </div>
@@ -684,7 +686,7 @@ function ThesisHeader() {
           <a href="#loop" className="bg-white text-black rounded-xl px-5 py-4 text-[15px] font-medium hover:bg-neutral-200 transition-colors">
             See the loop
           </a>
-          <a href="#trust" className="text-neutral-400 hover:text-neutral-100 transition-colors text-[15px]">Or skip to the rejected 1.8× →</a>
+          <a href="#trust" className="text-neutral-400 hover:text-neutral-100 transition-colors text-[15px]">Or skip to a rejected patch →</a>
         </div>
       </motion.div>
       <motion.p
@@ -709,7 +711,7 @@ function ThesisCards() {
   });
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-[30px] max-w-7xl mx-auto">
-      {/* fast but wrong */}
+      {/* plausible but broken */}
       <motion.div
         {...cardAnim(0.1)}
         className="relative h-[520px] rounded-3xl overflow-hidden bg-neutral-950 border border-white/5 flex flex-col pt-12 px-7"
@@ -734,7 +736,7 @@ function ThesisCards() {
         <WordsReveal as="h3" className="mt-4 text-4xl text-neutral-100 leading-tight" text={THESIS_CARDS[1].title} delay={0.4} />
         <WordsReveal as="p" className="mt-5 text-base opacity-50 text-neutral-100 max-w-[340px]" text={THESIS_CARDS[1].body} delay={0.6} step={0.02} duration={0.5} />
         <div className="mt-auto mb-10">
-          <div className="text-6xl font-medium text-amber-400 tabular-nums"><CountUpInView end={TOTALS.withinNoise} duration={1100} />/{TOTALS.proposed}</div>
+          <div className="text-6xl font-medium text-amber-400 tabular-nums"><CountUpInView end={TOTALS.notFaster} duration={1100} />/{TOTALS.proposed}</div>
           <p className="text-sm text-neutral-500 mt-2">{THESIS_CARDS[1].statLabel}</p>
         </div>
       </motion.div>
@@ -757,7 +759,7 @@ function ThesisCards() {
   );
 }
 
-// every measured candidate, in run order: red = fast but rejected, green = kept
+// the measured candidates shown, in run order: green = shipped, grey = passed but not in the final stack, red = rejected on speed
 function MeasuredCardChart() {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInViewFM(ref, { once: true, margin: "-80px" });
@@ -768,7 +770,7 @@ function MeasuredCardChart() {
       {bars.map((b) => (
         <div key={b.id} className="relative flex-1 h-full flex items-end justify-center">
           <motion.div
-            className={`w-2/3 rounded-t-sm ${b.status === "accepted" ? "bg-emerald-700" : "bg-red-500/40 border-t border-red-600/50"}`}
+            className={`w-2/3 rounded-t-sm ${b.shipped ? "bg-emerald-700" : b.status === "accepted" || b.status === "not_selected" ? "bg-neutral-900/25" : "bg-red-500/40 border-t border-red-600/50"}`}
             variants={{ hidden: { height: 0 }, visible: { height: `${((b.tokPerSec! - BASELINE_TOK_S * 0.8) / (max - BASELINE_TOK_S * 0.8)) * 100}%` } }}
             transition={{ duration: 0.6, ease: "easeOut" }}
             style={{ maxHeight: "100%" }}
@@ -794,12 +796,12 @@ function StatsSection() {
         </motion.div>
         <motion.div className="flex flex-col items-center text-center gap-3" initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-100px" }} transition={{ duration: 0.7, ease: "easeOut", delay: 0.2 }}>
           <span className="text-6xl text-neutral-100 font-medium tabular-nums"><CountNumber to={Math.round(((TOTALS.proposed - TOTALS.shipped) / TOTALS.proposed) * 100)} start={inView} />%</span>
-          <p className="text-2xl text-neutral-100 opacity-40 max-w-[260px]">of AI-proposed optimizations rejected</p>
+          <p className="text-2xl text-neutral-100 opacity-40 max-w-[260px]">of AI-proposed attempts not shipped</p>
         </motion.div>
 
         <motion.div className="relative bg-neutral-900 rounded-3xl p-10 w-full max-w-[520px] overflow-hidden border border-white/5" initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-100px" }} transition={{ duration: 0.7, ease: "easeOut", delay: 0.4 }}>
           <p className="text-3xl text-white leading-snug">
-            Across {TOTALS.proposed} experiments on the transformer, Hotpath kept {TOTALS.shipped} changes worth{" "}
+            Across {TOTALS.proposed} attempts on {RUN.target}, Hotpath shipped {TOTALS.shipped} changes worth{" "}
             <span className="relative inline-block align-baseline px-2 py-1">
               <motion.span aria-hidden className="absolute inset-0 bg-emerald-400 rounded-sm origin-left" initial={{ scaleX: 0 }} animate={inView ? { scaleX: 1 } : { scaleX: 0 }} transition={{ duration: 0.91, delay: 1.55, ease: "linear" }} style={{ transformOrigin: "left center" }} />
               <span className="relative font-medium text-emerald-400">{BEST.speedup}× decode</span>
@@ -810,7 +812,7 @@ function StatsSection() {
             — every one correct and faster than the noise.
           </p>
           <div className="mt-6 flex items-center gap-2 text-sm text-neutral-500">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" /> {ILLUSTRATIVE ? "illustrative run · replaced by the measured H100 result" : "measured run"}
+            <span className="w-2 h-2 rounded-full bg-emerald-400" /> {ILLUSTRATIVE ? "illustrative run" : <>measured on an {RUN.hardware} · {RUN.planner} planner, {RUN.worker} worker · <a className="underline hover:text-neutral-300" href={REPORT_URL} target="_blank" rel="noreferrer">full report</a></>}
           </div>
         </motion.div>
       </div>
@@ -916,7 +918,7 @@ function StepCard({ step, index }: { step: (typeof LOOP)[number]; index: number 
 
 /* ------------------------------------------------------------ verdict pills */
 
-const PILLS: Experiment[] = ["exp_0004", "exp_0029", "exp_0017", "exp_0006", "exp_0026", "exp_0011"].map(
+const PILLS: Experiment[] = ["exp_364b9d9ad5", "exp_9764890939", "exp_7c21754a1b", "exp_3df3ca135d", "exp_cde974a819", "exp_5a3154d8e6"].map(
   (id) => EXPERIMENTS.find((e) => e.id === id)!,
 );
 
@@ -949,8 +951,8 @@ function TrustSection() {
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8">
           <div className="flex flex-col gap-6 max-w-2xl">
             <span className="text-xs font-semibold uppercase tracking-[0.25em] text-neutral-500">§ 03 — the trust moment</span>
-            <WordsReveal as="h2" className="text-5xl lg:text-6xl text-neutral-100 leading-tight block" text="The agent found a 1.8× speedup. Hotpath threw it out." step={0.06} duration={0.6} />
-            <WordsReveal as="p" className="text-xl lg:text-2xl opacity-60 text-neutral-100 leading-8 block" text="The planner proposed int8 weights. The benchmark said 1.8× faster. The locked test said the model now writes different text. So it was rejected, and the reason was saved." step={0.025} delay={0.2} duration={0.5} />
+            <WordsReveal as="h2" className="text-5xl lg:text-6xl text-neutral-100 leading-tight block" text="The agent proposed CUDA graphs. Hotpath threw it out." step={0.06} duration={0.6} />
+            <WordsReveal as="p" className="text-xl lg:text-2xl opacity-60 text-neutral-100 leading-8 block" text="The planner proposed torch.compile with CUDA graphs to cut launch overhead, and the worker wrote the patch. The locked test crashed: the graph overwrote its own outputs. It was rejected before a single benchmark ran, and the reason was saved." step={0.025} delay={0.2} duration={0.5} />
           </div>
           <motion.a href={HARNESS_URL} target="_blank" rel="noreferrer" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-80px" }} transition={{ duration: 0.6, delay: 0.5, ease: "easeOut" }} className="inline-flex shrink-0 items-center gap-2 bg-white text-black px-7 py-4 rounded-xl font-medium text-lg hover:bg-neutral-200 transition-colors">
             See the harness <Icon path={ICONS.arrowUpRight} size={18} />
@@ -962,12 +964,12 @@ function TrustSection() {
           <motion.div className="w-full lg:w-[38%] shrink-0 flex flex-col gap-6" initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-80px" }} transition={{ duration: 0.7, ease: "easeOut" }}>
             <div className="rounded-3xl bg-neutral-900 border border-white/5 p-8 flex flex-col gap-6">
               <div className="flex items-baseline gap-3">
-                <span className="text-7xl font-medium text-red-400 tabular-nums line-through decoration-2"><CountUpInView end={18} format={(n) => (n / 10).toFixed(1)} duration={1600} />×</span>
-                <span className="text-sm text-neutral-400 leading-tight">measured speedup<br />never counted</span>
+                <span className="text-7xl font-medium text-red-400 tabular-nums"><CountUpInView end={TOTALS.brokeCorrectness} duration={1600} /></span>
+                <span className="text-sm text-neutral-400 leading-tight">attempts rejected on correctness<br />in this run, none of them timed</span>
               </div>
               <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-6">
-                <Stat big="17" label="token where output diverged" />
-                <Stat big="0.41" label="max |Δlogit| · tolerance 1e-3" />
+                <Stat big="exit 1" label="the locked test's verdict" />
+                <Stat big="5.96e-07" label="max |Δlogit| of the shipped stack" />
               </div>
               <p className="text-sm text-neutral-500 leading-relaxed">
                 <span className="italic text-neutral-400">Correctness comes first, speed second.</span> Tokens must match the original under greedy decoding, and logits must stay within tolerance. A fused kernel that reorders floating-point math passes; a change that alters what the model says does not, however fast it is.
@@ -1089,11 +1091,11 @@ function FunnelSection() {
           <Eyebrow>Why you need a verifier</Eyebrow>
           <WordsReveal as="h2" className="text-4xl lg:text-5xl leading-tight text-white" text="Most AI-proposed optimizations fail. That's the point." step={0.04} />
         </div>
-        <p className="text-lg text-neutral-400 leading-8">Out of {TOTALS.proposed} ideas, {TOTALS.shipped} shipped. A high rejection rate isn't the agent failing — it's the evidence that verification was necessary. If the model is usually wrong, correctness can't be something you trust. It has to be something you <span className="text-neutral-100">measure</span>.</p>
+        <p className="text-lg text-neutral-400 leading-8">Out of {TOTALS.proposed} attempts, {TOTALS.shipped} shipped. A high rejection rate isn't the agent failing — it's the evidence that verification was necessary. If the model is usually wrong, correctness can't be something you trust. It has to be something you <span className="text-neutral-100">measure</span>.</p>
       </div>
       <div className="flex items-center justify-between mb-5">
         <Eyebrow>From idea to shipped change</Eyebrow>
-        <FigTag>{ILLUSTRATIVE ? "illustrative run" : "measured run"} · {TOTALS.proposed} proposals</FigTag>
+        <FigTag>{ILLUSTRATIVE ? "illustrative run" : "measured run"} · {TOTALS.proposed} attempts</FigTag>
       </div>
       <ChartPanel>
         <Funnel />
@@ -1101,7 +1103,7 @@ function FunnelSection() {
       <div className="grid grid-cols-3 gap-4 mt-6">
         <StatTile value={<><CountUpInView end={Math.round((TOTALS.shipped / TOTALS.proposed) * 1000)} format={(n) => (n / 10).toFixed(1)} duration={1200} />%</>} label="shipped — correct and faster" color="text-emerald-400" />
         <StatTile value={<><CountUpInView end={Math.round((TOTALS.brokeCorrectness / TOTALS.proposed) * 1000)} format={(n) => (n / 10).toFixed(1)} duration={1200} />%</>} label="broke correctness" color="text-red-400" delay={0.08} />
-        <StatTile value={<><CountUpInView end={Math.round((TOTALS.withinNoise / TOTALS.proposed) * 1000)} format={(n) => (n / 10).toFixed(1)} duration={1200} />%</>} label="within measurement noise" color="text-amber-400" delay={0.16} />
+        <StatTile value={<><CountUpInView end={Math.round((TOTALS.notFaster / TOTALS.proposed) * 1000)} format={(n) => (n / 10).toFixed(1)} duration={1200} />%</>} label="not measurably faster" color="text-amber-400" delay={0.16} />
       </div>
     </section>
   );
@@ -1121,12 +1123,12 @@ function ResultsSection() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
         <StatTile value={<><CountUpInView end={Math.round(BEST.speedup! * 100)} format={(n) => (n / 100).toFixed(2)} duration={1400} />×</>} label="decode throughput vs baseline" color="text-emerald-400" delay={0} />
         <StatTile value={<CountUpInView end={last.tokPerSec} duration={1400} />} label="tokens/sec, best verified" color="text-neutral-100" delay={0.08} />
-        <StatTile value={ACCEPTED.length} label="changes in the accepted chain" color="text-neutral-100" delay={0.16} />
+        <StatTile value={ACCEPTED.length} label="changes shipped" color="text-neutral-100" delay={0.16} />
         <StatTile value={0} label="changed outputs shipped" color="text-blue-300" delay={0.24} />
       </div>
       <div className="flex items-center justify-between mb-5">
         <Eyebrow>Throughput over the run</Eyebrow>
-        <FigTag>{ILLUSTRATIVE ? "illustrative" : "measured"} · steps are accepted changes</FigTag>
+        <FigTag>{ILLUSTRATIVE ? "illustrative" : "measured"} · steps are accepted changes · * replaced by a faster lineage</FigTag>
       </div>
       <ChartPanel>
         <ThroughputChart />
@@ -1135,14 +1137,14 @@ function ResultsSection() {
         <ChartPanel>
           <div className="flex items-center justify-between mb-6">
             <Eyebrow>Before · baseline profile</Eyebrow>
-            <FigTag>{FLAME_BEFORE.ms} ms / step</FigTag>
+            <FigTag>torch.profiler · {FLAME_BEFORE.ms.toFixed(2)} ms shown</FigTag>
           </div>
           <FlameGraph root={FLAME_BEFORE} scaleMs={FLAME_BEFORE.ms} />
         </ChartPanel>
         <ChartPanel>
           <div className="flex items-center justify-between mb-6">
             <Eyebrow>After · head profile</Eyebrow>
-            <FigTag>{FLAME_AFTER.ms} ms / step · {(FLAME_AFTER.ms / FLAME_BEFORE.ms).toFixed(2)}×</FigTag>
+            <FigTag>torch.profiler · {FLAME_AFTER.ms.toFixed(2)} ms shown</FigTag>
           </div>
           <FlameGraph root={FLAME_AFTER} scaleMs={FLAME_BEFORE.ms} />
         </ChartPanel>
@@ -1154,8 +1156,8 @@ function ResultsSection() {
         viewport={{ once: true, margin: "-80px" }}
         transition={{ duration: 0.7, ease: "easeOut" }}
       >
-        <WordsReveal as="h3" className="text-3xl text-white leading-tight" text="The widest bars shrank." step={0.05} />
-        <p className="text-neutral-400 leading-relaxed">Fix the slowest thing and something else becomes the slowest, so Hotpath re-profiles after every accepted change. The profile shows where time went; the benchmark is the authority on how much faster it is.</p>
+        <WordsReveal as="h3" className="text-3xl text-white leading-tight" text="The profile moved less than the benchmark." step={0.05} />
+        <p className="text-neutral-400 leading-relaxed">GPU time in these ops fell only from {FLAME_BEFORE.ms.toFixed(2)} to {FLAME_AFTER.ms.toFixed(2)} ms, yet decode throughput rose {BEST.speedup!.toFixed(2)}×. Four attention ops became one fused kernel that took more GPU time, not less, and the mask stopped being rebuilt every call. The profile does not account for most of the gain; launch and CPU overhead, which a GPU-time profile does not capture, is the likely remainder. That is why Hotpath lets the benchmark, never the profile, decide. Re-checked afterwards outside Hotpath with the same locked test and benchmark: {RUN.recheck.baseline} → {RUN.recheck.optimized} tokens/sec.</p>
         <div className="flex flex-wrap gap-2 pt-1">
           {FLAME_NOTES.map((t) => (
             <span key={t.name} className="text-sm text-emerald-200 bg-emerald-500/10 border border-emerald-500/25 rounded-lg px-3 py-1.5 tabular-nums">{t.name} {t.before} → {t.after} · {t.how}</span>
@@ -1206,7 +1208,7 @@ function QuickstartSection() {
 
           <motion.div className="rounded-3xl border border-white/10 overflow-hidden flex flex-col" style={{ backgroundColor: "#141110" }} initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-100px" }} transition={{ duration: 0.7, delay: 0.2, ease: "easeOut" }}>
             <div className="flex items-center justify-between px-5 py-4">
-              <span className="text-xs font-mono text-neutral-500">configs/dryft_h100.yaml</span>
+              <span className="text-xs font-mono text-neutral-500">configs/dryft_local.yaml</span>
               <CopyButton value={CONFIG_YAML} />
             </div>
             <div className="mx-[20px] mb-[20px] relative rounded-2xl overflow-hidden border border-white/10">

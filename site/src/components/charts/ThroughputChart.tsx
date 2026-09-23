@@ -10,8 +10,8 @@ const X0 = 70;
 const X1 = 968;
 const Y0 = 26;
 const Y1 = 340;
-const YMIN = 80;
-const YMAX = 240;
+const YMIN = 900;
+const YMAX = 1500;
 const xs = (n: number) => X0 + (n / RUN_LENGTH) * (X1 - X0);
 const ys = (v: number) => Y1 - ((v - YMIN) / (YMAX - YMIN)) * (Y1 - Y0);
 
@@ -37,7 +37,8 @@ export default function ThroughputChart() {
   const lo = stepPath(1 - NOISE_PCT / 100).reverse();
   const band = `M ${hi.join(" L ")} L ${lo.join(" L ")} Z`;
   const last = THROUGHPUT_STEPS[THROUGHPUT_STEPS.length - 1];
-  const rejected = EXPERIMENTS.filter((e) => e.status !== "accepted" && e.tokPerSec !== null);
+  // Measured but not kept. Candidates that failed correctness were never benchmarked, so they have no point.
+  const rejected = EXPERIMENTS.filter((e) => !e.shipped && e.status !== "accepted" && e.tokPerSec !== null);
 
   return (
     <div ref={ref} className="w-full">
@@ -53,13 +54,13 @@ export default function ThroughputChart() {
             </clipPath>
           </defs>
 
-          {[80, 120, 160, 200, 240].map((v) => (
+          {[900, 1000, 1100, 1200, 1300, 1400, 1500].map((v) => (
             <g key={v}>
               <line x1={X0} x2={X1} y1={ys(v)} y2={ys(v)} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
               <text x={X0 - 10} y={ys(v) + 4} textAnchor="end" fontSize={12} fill="#78706a" fontFamily="'Public Sans', sans-serif">{v}</text>
             </g>
           ))}
-          {[0, 5, 10, 15, 20, 25, 30, 35, 40].map((n) => (
+          {[0, 10, 20, 30, 40, 50].map((n) => (
             <text key={n} x={xs(n)} y={Y1 + 24} textAnchor="middle" fontSize={12} fill="#8a817a" fontFamily="'Public Sans', sans-serif">{n}</text>
           ))}
 
@@ -72,10 +73,8 @@ export default function ThroughputChart() {
           {/* rejected candidates: measured, but never counted */}
           {rejected.map((e, i) => (
             <motion.g key={e.id} initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : { opacity: 0 }} transition={{ delay: 1.2 + i * 0.08, duration: 0.4 }}>
-              <circle cx={xs(e.n)} cy={ys(e.tokPerSec!)} r={5} fill="none" stroke={e.status === "rejected_correctness" ? "#d9776c" : "#9c938a"} strokeWidth={1.6} />
-              {e.status === "rejected_correctness" && (
-                <text x={xs(e.n) + 9} y={ys(e.tokPerSec!) + 4} fontSize={11.5} fill="#e8a19a" fontFamily="'Public Sans', sans-serif">{e.idea} · rejected</text>
-              )}
+              <circle cx={xs(e.n)} cy={ys(e.tokPerSec!)} r={5} fill="none" stroke="#9c938a" strokeWidth={1.6} />
+              <text x={xs(e.n) > (X0 + X1) / 2 ? xs(e.n) - 9 : xs(e.n) + 9} y={ys(e.tokPerSec!) + 16} textAnchor={xs(e.n) > (X0 + X1) / 2 ? "end" : "start"} fontSize={11.5} fill="#a39a92" fontFamily="'Public Sans', sans-serif">{e.idea} · {e.status === "not_selected" ? "not selected" : "within noise"}</text>
             </motion.g>
           ))}
 
@@ -86,7 +85,7 @@ export default function ThroughputChart() {
               <text x={xs(s.at) + 8} y={ys(s.tokPerSec) - 9} fontSize={12} fill="#cde7d4" fontFamily="'Public Sans', sans-serif">{s.label}</text>
             </motion.g>
           ))}
-          <motion.text x={xs(RUN_LENGTH) - 8} y={ys(last.tokPerSec) + 26} textAnchor="end" fontSize={15} fontWeight={600} fill="#96cba8" fontFamily="'Public Sans', sans-serif" initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : { opacity: 0 }} transition={{ delay: 1.6, duration: 0.4 }}>{last.tokPerSec} tok/s</motion.text>
+          <motion.text x={xs(RUN_LENGTH) - 8} y={ys(last.tokPerSec) - 12} textAnchor="end" fontSize={15} fontWeight={600} fill="#96cba8" fontFamily="'Public Sans', sans-serif" initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : { opacity: 0 }} transition={{ delay: 1.6, duration: 0.4 }}>{last.tokPerSec} tok/s</motion.text>
 
           <text x={(X0 + X1) / 2} y={H - 4} textAnchor="middle" fontSize={13} fill="#9c938a" fontFamily="'Public Sans', sans-serif">experiments</text>
           <text x={18} y={(Y0 + Y1) / 2} textAnchor="middle" fontSize={13} fill="#9c938a" fontFamily="'Public Sans', sans-serif" transform={`rotate(-90 18 ${(Y0 + Y1) / 2})`}>tokens / sec</text>
@@ -97,8 +96,7 @@ export default function ThroughputChart() {
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 pl-12 text-sm">
         <span className="inline-flex items-center gap-2 text-neutral-300"><span className="w-3 h-3 rounded-sm bg-emerald-400" />best verified</span>
         <span className="inline-flex items-center gap-2 text-neutral-300"><span className="w-3 h-3 rounded-sm bg-emerald-400/20" />noise band ±{NOISE_PCT}%</span>
-        <span className="inline-flex items-center gap-2 text-neutral-300"><span className="w-3 h-3 rounded-full border border-red-400" />fast but wrong</span>
-        <span className="inline-flex items-center gap-2 text-neutral-300"><span className="w-3 h-3 rounded-full border border-neutral-400" />within noise</span>
+        <span className="inline-flex items-center gap-2 text-neutral-300"><span className="w-3 h-3 rounded-full border border-neutral-400" />measured, not kept</span>
       </div>
     </div>
   );
