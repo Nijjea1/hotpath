@@ -16,9 +16,20 @@ import sentry_sdk
 from dotenv import load_dotenv
 from sentry_sdk import logger as sentry_logger, metrics
 from sentry_sdk.consts import OP, SPANDATA
+from sentry_sdk.transport import HttpTransport
 
 log = logging.getLogger("hotpath")
 _enabled = False
+
+
+class _BoundedHttpTransport(HttpTransport):
+    """Telemetry is best-effort: never retry or stall the optimization CLI."""
+    TIMEOUT = 2
+
+    def _get_pool_options(self):
+        options = super()._get_pool_options()
+        options["retries"] = False
+        return options
 
 
 class _NoopSpan:
@@ -34,6 +45,12 @@ class _NoopSpan:
 
 def init_sentry(release: str | None = None) -> bool:
     global _enabled
+    if os.environ.get("HOTPATH_DISABLE_SENTRY", "").lower() in {"1", "true", "yes"}:
+        if _enabled:
+            sentry_sdk.get_client().close(timeout=0)
+            sentry_sdk.get_global_scope().set_client(None)
+            _enabled = False
+        return False
     # Never override explicitly exported variables (including an empty DSN).
     load_dotenv(Path.cwd() / ".env", override=False)
     if _enabled:
@@ -61,6 +78,8 @@ def init_sentry(release: str | None = None) -> bool:
         before_send_transaction=_scrub,
         before_send_log=_scrub,
         before_send_metric=_scrub,
+        transport=_BoundedHttpTransport,
+        shutdown_timeout=2,
         integrations=[FastApiIntegration(), StarletteIntegration(),
                       LoggingIntegration(level=logging.INFO, event_level=logging.ERROR,
                                          sentry_logs_level=logging.INFO)],
@@ -93,7 +112,7 @@ def event(message: str, **attributes: Any) -> None:
         sentry_logger.info(message, attributes=attributes)
 
 
-def flush(timeout: float = 5.0) -> None:
+def flush(timeout: float = 2.0) -> None:
     if _enabled:
         sentry_sdk.flush(timeout=timeout)
 

@@ -28,6 +28,7 @@ def telemetry(monkeypatch):
     original_init = sentry_sdk.init
 
     def initialize(**options):
+        options.pop("transport", None)
         return original_init(**options, transport=transport, auto_enabling_integrations=False)
 
     monkeypatch.setattr(sentry_sdk, "init", initialize)
@@ -52,6 +53,18 @@ def items(transport, kind):
     return result
 
 
+def test_http_transport_disables_network_retries():
+    client = sentry_sdk.Client(dsn="https://public@example.invalid/1", transport=obs._BoundedHttpTransport,
+                               auto_enabling_integrations=False)
+    transport = client.transport
+    try:
+        assert isinstance(transport, obs._BoundedHttpTransport)
+        assert transport._get_pool_options()["retries"] is False
+        assert transport.TIMEOUT == 2
+    finally:
+        client.close()
+
+
 def test_environment_loading_and_no_dsn(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(obs, "_enabled", False)
@@ -71,6 +84,15 @@ def test_no_dsn_is_a_complete_noop_even_with_dotenv(monkeypatch, tmp_path):
     monkeypatch.setattr(sentry_sdk, "init", lambda **kwargs: pytest.fail("SDK initialized without a DSN"))
     assert obs.init_sentry() is False
     assert obs.enabled() is False
+
+
+def test_explicit_disable_wins_over_a_parent_or_dotenv_dsn(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(obs, "_enabled", False)
+    monkeypatch.setenv("HOTPATH_DISABLE_SENTRY", "true")
+    monkeypatch.setenv("SENTRY_DSN", "https://public@example.invalid/1")
+    monkeypatch.setattr(sentry_sdk, "init", lambda **kwargs: pytest.fail("SDK initialized while disabled"))
+    assert obs.init_sentry() is False
 
 
 def test_disabled_wrappers_never_touch_global_sdk(monkeypatch):
