@@ -56,6 +56,34 @@ the metric climbing, and a red node for every rejected candidate with the reason
 When *nothing* was accepted it stays up too — "11 tried, 4 broke correctness, 7 inside the noise band"
 is a result, and it is written down there.
 
+### Check first, so a run cannot waste your time
+
+```bash
+hotpath check https://github.com/you/your-repo
+```
+
+About a second, read-only, never runs your code. It names what would stop a run, suggests the flag
+that avoids it, and prices the run before you spend anything:
+
+```
+# Hotpath preflight: textdistance
+
+CAUTION - a run can work, but read these first
+
+Cautions:
+  ! 22 property test(s) across 7 file(s) run under Hypothesis without deadline=None. Hypothesis fails
+    a test that runs slower than its deadline, so this suite can go red purely because the machine is
+    busy - and a benchmark keeps the machine busy.
+      fix: deselect those files with --test-cmd, or add a conftest profile with deadline=None
+  ! 3 test(s) are marked `external` ("tests that require external libs to run").
+      fix: --test-cmd 'python -m pytest -q -m "not external"'
+
+Estimated cost of one run (3 iterations x 3 candidates):
+  ~65,773 input tokens across 24 model call(s), about $0.16 at $2.50/Mtok
+```
+
+Every one of those findings cost a ten-minute failed run to discover by hand.
+
 ### It has done this to a repository nobody here wrote
 
 **[Nijjea1/inflect#1](https://github.com/Nijjea1/inflect/pull/1)** — a draft pull request Hotpath

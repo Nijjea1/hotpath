@@ -23,6 +23,28 @@ The wrapper creates `.venv`, installs Hotpath into it, and runs `hotpath go`. No
 
 Every stage either finishes or stops with the reason and what to do about it.
 
+## Before you spend anything: `hotpath check`
+
+```bash
+hotpath check https://github.com/you/your-repo     # or a local path
+```
+
+A read-only look that takes about a second and never runs the repository's code. It reports what
+would stop a run, suggests the flag that avoids it, and prices the run. Exit code is 0 for go, 1 for
+caution, 2 for stop, so it can gate a script.
+
+It exists because the guided flow's gates all fire *after* the expensive part — cloning, building a
+virtualenv, running the suite three times — and the four things that stopped the first live runs were
+all visible in the source the whole time:
+
+| What it finds | Why it matters |
+|---|---|
+| Property tests without `deadline=None` | Hypothesis fails a test that runs slower than its deadline, so the suite goes red when the machine is busy — and a benchmark keeps it busy. A correctness check that is itself a timing measurement cannot decide a timing experiment. |
+| Tests behind an optional marker (`external`, `network`, …) | They need libraries that are not installed, and a red baseline stops the run. The suggested `--test-cmd` deselects them. |
+| A module past the source ceiling | A worker is shown a whole file and refuses one it cannot fit, so no patch to that file is ever written. |
+| A benchmark that will be coarse, or absent | Whether "faster" will be a workload over one hot function or the whole suite's runtime, which raises the bar a lot. |
+| `pytest-randomly`, compiled extensions | Randomised order reads as flakiness; work happening in C means the Python you may edit is a wrapper. |
+
 ## What each stage does
 
 **1. Setup.** Checks Python ≥3.11 and git; finds how to open a PR (`gh` → `GITHUB_TOKEN` → a pre-filled
@@ -52,6 +74,14 @@ against). So do flaky tests, which would make Hotpath reject good changes at ran
 
 **5. Benchmark.** A benchmark defines "faster", so it is chosen in this order and always shown to you for
 approval:
+0. **the benchmark this repository was measured against last time**, re-validated before use. Three runs
+   against one repository once produced 1.47x, nothing, and 1.45x, because each asked a model for a
+   fresh workload and got a different one — three numbers that were never comparable. The chosen
+   workload is remembered outside the repository and reused, so a second run measures the same thing.
+   Reuse is never blind: a remembered workload goes through the same validation as a new one and is
+   discarded if the project has moved under it. `--no-reuse-benchmark` turns it off,
+   `--regenerate-benchmark` forces a new one. Every run prints a **benchmark id**, and two runs with
+   different ids measured different things;
 1. the repository's own Hotpath benchmark;
 2. **a generated one**: Hotpath profiles the test suite, asks the planner model to write a deterministic
    `workload()` over the hottest project functions, and validates it by running it — measurable but
@@ -113,6 +143,8 @@ docker` requires the container.
 | `--sandbox {auto,local,docker}` | Where candidate code runs |
 | `--no-pr` | Build the branch locally, push nothing |
 | `--resume` | Continue the last `go` run on that repository |
+| `--no-reuse-benchmark` | Generate a fresh benchmark instead of reusing the remembered one (two runs then are not comparable) |
+| `--regenerate-benchmark` | Write a new benchmark even if the remembered one still validates |
 | `--no-dashboard` | Do not serve the live tree (it is served, and held open afterwards, by default) |
 | `--no-open` | Serve the dashboard but open no browser tab, for the PR or for the dashboard |
 

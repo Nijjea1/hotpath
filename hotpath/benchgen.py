@@ -204,6 +204,23 @@ class BenchChoice:
     description: str = ""
     validation: Optional[Validation] = None
     attempts: list[str] = field(default_factory=list)     # why earlier generations were rejected
+    reused: bool = False              # the workload came from cache rather than being written again
+
+    @property
+    def digest(self) -> str:
+        """Identifies what "faster" meant, so two runs can be told apart.
+
+        Three runs against the same repository produced 1.47x, nothing, and 1.45x, because each
+        generated a different workload. Without this in the record there is no way to notice that the
+        measurements were never comparable.
+        """
+        return workload_digest(self.files.get(WORKLOAD_FILE, self.bench_cmd))
+
+
+def workload_digest(code: str) -> str:
+    """A short, stable id for a workload's source, ignoring whitespace-only differences."""
+    normalised = "\n".join(line.rstrip() for line in code.strip().splitlines())
+    return hashlib.sha256(normalised.encode("utf-8")).hexdigest()[:12]
 
 
 # --------------------------------------------------------------------------- #
@@ -304,8 +321,11 @@ def openai_generator(model: str, api_key_env: str = "OPENAI_API_KEY",
 
     def generate(messages: list[dict]) -> WorkloadResponse:
         with obs.ai_chat(model, "benchmark-writer", "openai") as sp:
+            # temperature 0 and a fixed seed: a benchmark that changes every run makes two runs of
+            # the same repository incomparable, which is worse than a benchmark that is merely adequate.
             resp = client.beta.chat.completions.parse(model=model, messages=messages,
-                                                      response_format=WorkloadResponse)
+                                                      response_format=WorkloadResponse,
+                                                      temperature=0, seed=0)
             obs.record_ai_usage(sp, resp)
         parsed = resp.choices[0].message.parsed
         if parsed is None:

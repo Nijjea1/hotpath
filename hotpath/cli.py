@@ -139,6 +139,7 @@ def cmd_go(args: argparse.Namespace) -> int:
                      iterations=args.iterations, candidates=args.candidates, beam=args.beam,
                      max_tokens=args.max_tokens, max_minutes=args.max_minutes, sandbox=args.sandbox,
                      test_cmd=args.test_cmd, bench_cmd=args.bench_cmd, no_generate=args.no_generate,
+                     reuse_benchmark=args.reuse_benchmark, regenerate_benchmark=args.regenerate_benchmark,
                      test_runs=args.test_runs, test_timeout=args.test_timeout, no_pr=args.no_pr,
                      pr_method=args.pr_method, ready=args.ready, open_browser=not args.no_open,
                      dashboard=args.dashboard, verify_ci=args.verify_ci, ci_attempts=args.ci_attempts,
@@ -160,6 +161,17 @@ def cmd_assess(args: argparse.Namespace) -> int:
 def cmd_doctor(args: argparse.Namespace) -> int:
     from hotpath.doctor import run
     return run(as_json=args.json, require_gpu=args.require_gpu)
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    """Exit 0 for go, 1 for caution, 2 for stop, so a script can gate on it."""
+    import json
+
+    from hotpath.preflight import preflight
+
+    p = preflight(Path(args.path), iterations=args.iterations, candidates=args.candidates)
+    print(json.dumps(p.to_dict(), indent=2) if args.json else p.render())
+    return {"go": 0, "caution": 1, "stop": 2}[p.verdict]
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -290,6 +302,11 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--test-cmd", help="override the detected correctness check")
     g.add_argument("--bench-cmd", help="use this benchmark (prints Hotpath JSON) instead of finding or generating one")
     g.add_argument("--no-generate", action="store_true", help="never ask a model to write a benchmark")
+    g.add_argument("--reuse-benchmark", action=argparse.BooleanOptionalAction, default=True,
+                   help="measure against the same generated benchmark as the last run on this repository, "
+                        "re-validated before use (default: on; without it two runs are not comparable)")
+    g.add_argument("--regenerate-benchmark", action="store_true",
+                   help="write a new benchmark even if the remembered one still validates")
     g.add_argument("--test-runs", type=int, default=3, help="baseline test runs used to detect flaky tests")
     g.add_argument("--test-timeout", type=float, default=900.0, help="seconds per test-suite run")
     g.add_argument("--no-pr", action="store_true", help="build the PR branch locally but do not push")
@@ -309,6 +326,14 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--remote", default="origin")
     g.add_argument("--resume", action="store_true", help="continue the last `go` run on this repository")
     g.set_defaults(fn=cmd_go)
+    c = sub.add_parser("check", help="preflight a repository in seconds: what would stop a run, and what it "
+                                    "would cost (exit 0 go, 1 caution, 2 stop)")
+    c.add_argument("path", nargs="?", default=".")
+    c.add_argument("--json", action="store_true")
+    c.add_argument("--iterations", type=int, default=3, help="iterations to price the estimate for")
+    c.add_argument("--candidates", type=int, default=3, help="candidates per iteration to price for")
+    c.set_defaults(fn=cmd_check)
+
     s0 = sub.add_parser("assess", help="read-only report: ecosystem, tests, benchmark, editable and locked files")
     s0.add_argument("path", nargs="?", default=".")
     s0.add_argument("--json", action="store_true")

@@ -72,6 +72,8 @@ class GoOptions:
     ready: bool = False                       # open a ready-for-review PR instead of a draft
     open_browser: bool = True
     dashboard: bool = True
+    reuse_benchmark: bool = True              # measure against the same workload as last time
+    regenerate_benchmark: bool = False        # write a new one even if a remembered one validates
     verify_ci: bool = True                    # watch the PR's checks, and fix what the PR broke
     ci_attempts: int = 2                      # how many times to try repairing CI
     ci_timeout: float = 900.0                 # seconds to wait for checks to settle
@@ -95,6 +97,7 @@ class GoState:
     image: str = ""
     bench_kind: str = ""
     bench_description: str = ""
+    bench_digest: str = ""                    # which workload the numbers were measured against
     run_id: str = ""
     pr_url: str = ""
     pr_branch: str = ""
@@ -581,16 +584,19 @@ class Go:
             choice = benchgen.BenchChoice("existing", self.a.bench_cmd, self.a.profile_cmd,
                                           description=f"the repository's own benchmark (`{self.a.bench_cmd}`)")
         elif self.a.tier == 1 and not self.o.no_generate and (self.o.provider or "openai") == "openai":
-            self.info("profiling the test suite to find the project's hot paths")
-            try:
-                cfg_model = "gpt-4.1"
-                generator = benchgen.openai_generator(cfg_model)
-                prepare = self._commit_in_worktree if self.state.sandbox == "docker" else (lambda _w: None)
-                choice = benchgen.generate_benchmark(wt, self.runner, generator, prepare=prepare, say=self.info)
-            except Exception as e:  # generation is best-effort; the fallback is always available
-                self.info(f"benchmark generation failed: {str(e).splitlines()[0][:200]}")
+            prepare = self._commit_in_worktree if self.state.sandbox == "docker" else (lambda _w: None)
+            choice = self._reuse_cached_benchmark(wt, prepare)
             if choice is None:
-                self.info("no generated benchmark passed validation")
+                self.info("profiling the test suite to find the project's hot paths")
+                try:
+                    generator = benchgen.openai_generator("gpt-4.1")
+                    choice = benchgen.generate_benchmark(wt, self.runner, generator, prepare=prepare, say=self.info)
+                except Exception as e:  # generation is best-effort; the fallback is always available
+                    self.info(f"benchmark generation failed: {str(e).splitlines()[0][:200]}")
+                if choice is None:
+                    self.info("no generated benchmark passed validation")
+                else:
+                    self._remember_benchmark(choice)
         if choice is None and self.a.bench_wrap_cmd:
             choice = benchgen.BenchChoice("wrapped", f"python -m hotpath.benchwrap --trials 7 --warmup 1 -- "
                                                      f"{self.a.bench_wrap_cmd}", self.a.profile_cmd,
@@ -631,7 +637,63 @@ class Go:
                          "hotpath_bench.py by hand (see hotpath_bench.py from `hotpath init`)")
         self.choice = choice
         self.state.bench_kind, self.state.bench_description = choice.kind, choice.description
+        self.state.bench_digest = choice.digest
         self.step(i, f"{choice.kind}: {choice.description}")
+        # The id of what "faster" meant. Two runs with different digests measured different things,
+        # and their speedups cannot be compared — which is invisible without saying so.
+        self.info(f"benchmark id: {choice.digest}" + ("  (reused from the last run)" if choice.reused else ""))
+
+    # ---------------------------------------------------------------- benchmark reuse
+    def _cache(self):
+        from hotpath.benchcache import BenchmarkCache
+        root = Path(self.o.workspaces) if self.o.workspaces else _default_workspaces()
+        return BenchmarkCache(root / ".cache" / "benchmarks")
+
+    def _cache_key(self) -> str:
+        """Key on what the user asked for, so a clone and a local checkout of the same repo agree."""
+        return self.state.github or self.o.target
+
+    def _reuse_cached_benchmark(self, wt: Path, prepare):
+        """The workload this target was measured against last time, if it still validates.
+
+        Reuse is the whole point — three runs of one repository produced three different benchmarks
+        and therefore three incomparable numbers — but it is never blind. The cached workload is run
+        through exactly the same validation as a fresh one, and discarded if the project has moved
+        under it. Caching decides what is *tried first*; it never lowers the bar.
+        """
+        from hotpath import benchgen
+
+        if self.o.regenerate_benchmark or not self.o.reuse_benchmark:
+            return None
+        cached = self._cache().load(self._cache_key(), self.state.base_commit)
+        if cached is None:
+            return None
+        self.info(f"reusing the benchmark this repository was measured against before: {cached.summary()}")
+        files = benchgen.bench_files(cached.code)
+        for rel, text in {**files, benchgen.DIGEST_FILE: benchgen._DIGEST_SCRIPT}.items():
+            (wt / rel).write_text(text, encoding="utf-8", newline="\n")
+        prepare(wt)
+        v = benchgen.validate(wt, self.runner, timeout=150)
+        if not v.ok:
+            self.info(f"the remembered benchmark no longer validates ({benchgen._one_line(v.reason)}); "
+                      f"writing a new one")
+            return None
+        choice = benchgen.BenchChoice("generated", f"python {benchgen.BENCH_FILE}",
+                                     f"python {benchgen.PROFILE_FILE}", files,
+                                     cached.description, v, reused=True)
+        return choice
+
+    def _remember_benchmark(self, choice) -> None:
+        from hotpath import benchgen
+
+        code = choice.files.get(benchgen.WORKLOAD_FILE)
+        if not code or choice.kind != "generated":
+            return
+        v = choice.validation
+        self._cache().save(self._cache_key(), code, choice.description, choice.digest,
+                           base_commit=self.state.base_commit,
+                           median_s=(v.median_s if v else 0.0), noise=(v.noise if v else 0.0),
+                           details=(v.details if v else []))
 
     def _commit_in_worktree(self, wt: Path) -> None:
         """Containers only see tracked files; commit the candidate benchmark in the throwaway worktree."""
@@ -677,6 +739,8 @@ class Go:
         _git(["add", "--", *dict.fromkeys(files)], self.repo)
         body = [f"hotpath: set up benchmark, config, and verification check", "",
                 f"Benchmark: {self.choice.description}.",
+                f"Benchmark id: {self.choice.digest} (two runs with different ids measured different "
+                f"things, so their speedups are not comparable).",
                 f"Correctness: `{self.test_cmd}`.",
                 "These files define what Hotpath measured. Hotpath may never edit them afterwards.", "",
                 SETUP_TRAILER]

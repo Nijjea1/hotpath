@@ -163,3 +163,78 @@ def test_generated_files_need_nothing_from_hotpath(tmp_path):
                               cwd=tmp_path, capture_output=True, text=True, env=env)
     assert imported.returncode == 0, f"importing them failed:\n{imported.stderr[-800:]}"
     assert imported.stdout == "", "importing them ran the benchmark; guard main() behind __main__"
+
+
+# --------------------------------------------------------------------------- #
+# Reusing the benchmark a repository was measured against last time.
+#
+# Three runs against one repository produced 1.47x, nothing, and 1.45x, because each generated a
+# different workload. Reuse fixes that — but a remembered workload still has to clear the same bar,
+# so these pin both halves: it is tried first, and it is dropped the moment it stops validating.
+
+def _go_for_cache(tmp_path, repo, runner, **opts):
+    from hotpath.go import Go, GoOptions
+    said = []
+    o = GoOptions(target=str(repo), workspaces=str(tmp_path / "ws"), **opts)
+    go = Go(o, out=said.append, ask=None)
+    go.runner, go.said = runner, said
+    go.state.base_commit = "deadbeef"
+    return go
+
+
+def test_a_remembered_workload_is_reused_and_revalidated(tmp_path, repo, runner, steady):
+    go = _go_for_cache(tmp_path, repo, runner)
+    go._cache().save(str(repo), GOOD, "dedupes a list", benchgen.workload_digest(GOOD))
+
+    choice = go._reuse_cached_benchmark(repo, lambda _w: None)
+    assert choice is not None, "the remembered workload validates, so it should be reused"
+    assert choice.reused and choice.kind == "generated"
+    assert choice.digest == benchgen.workload_digest(GOOD)
+    assert choice.validation and choice.validation.ok, "reuse still runs the full validation"
+    assert any("reusing the benchmark" in line for line in go.said)
+
+
+def test_a_remembered_workload_that_no_longer_validates_is_dropped(tmp_path, repo, runner, steady):
+    """The project moved under it: a workload that is now far too fast to time must not be reused
+    just because it once was good."""
+    go = _go_for_cache(tmp_path, repo, runner)
+    go._cache().save(str(repo), TOO_FAST, "stale", benchgen.workload_digest(TOO_FAST))
+
+    assert go._reuse_cached_benchmark(repo, lambda _w: None) is None
+    assert any("no longer validates" in line for line in go.said)
+
+
+def test_reuse_can_be_turned_off_and_forced_off(tmp_path, repo, runner, steady):
+    for opts in ({"reuse_benchmark": False}, {"regenerate_benchmark": True}):
+        go = _go_for_cache(tmp_path, repo, runner, **opts)
+        go._cache().save(str(repo), GOOD, "d", benchgen.workload_digest(GOOD))
+        assert go._reuse_cached_benchmark(repo, lambda _w: None) is None, opts
+
+
+def test_a_generated_benchmark_is_remembered_for_next_time(tmp_path, repo, runner, steady):
+    go = _go_for_cache(tmp_path, repo, runner)
+    files = benchgen.bench_files(GOOD, trials=7)
+    choice = benchgen.BenchChoice("generated", "python hotpath_bench.py", None, files, "dedupes",
+                                  benchgen.Validation(True, median_s=0.02, noise=0.03))
+    go._remember_benchmark(choice)
+
+    cached = go._cache().load(str(repo))
+    assert cached is not None and cached.code == GOOD
+    assert cached.digest == choice.digest and cached.median_s == 0.02
+
+
+def test_a_fallback_benchmark_is_not_remembered(tmp_path, repo, runner):
+    """Only a generated workload is worth remembering; timing the test suite has nothing to cache."""
+    go = _go_for_cache(tmp_path, repo, runner)
+    go._remember_benchmark(benchgen.tests_fallback("python -m pytest -q", "no benchmark"))
+    assert go._cache().load(str(repo)) is None
+
+
+def test_the_cache_key_is_the_github_slug_when_there_is_one(tmp_path, repo, runner):
+    """A clone and a local checkout of the same repository must agree, or a reused benchmark would be
+    invisible to whichever form the user typed second."""
+    go = _go_for_cache(tmp_path, repo, runner)
+    go.state.github = "octo/repo"
+    assert go._cache_key() == "octo/repo"
+    go.state.github = ""
+    assert go._cache_key() == str(repo)
