@@ -160,7 +160,7 @@ def cmd_assess(args: argparse.Namespace) -> int:
 
 def cmd_doctor(args: argparse.Namespace) -> int:
     from hotpath.doctor import run
-    return run(as_json=args.json, require_gpu=args.require_gpu)
+    return run(as_json=args.json, require_gpu=args.require_gpu, verify_keys=args.verify_keys)
 
 
 def cmd_check(args: argparse.Namespace) -> int:
@@ -257,6 +257,8 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--json", action="store_true")
     d.add_argument("--require-gpu", action="store_true",
                    help="fail unless PyTorch can use CUDA, ROCm, Intel XPU, or Apple MPS")
+    d.add_argument("--verify-keys", action="store_true",
+                   help="ask each model endpoint whether its key still works (a present key can be revoked)")
     d.set_defaults(fn=cmd_doctor)
     i = sub.add_parser("init", help="set a repository up for Hotpath (.hotpath.yaml + CI check)")
     i.add_argument("path", nargs="?", default=".")
