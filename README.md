@@ -10,6 +10,11 @@ the measured noise. Everything else is recorded with the reason it was rejected.
 
 > Most AI coding tools generate code. Hotpath generates evidence.
 
+https://github.com/user-attachments/assets/c344d339-d90a-4014-946d-866ab9d41f7a
+
+*86 seconds: a real `hotpath go` run, the dashboard rejecting changes with the exact failing test, the
+noise-aware accept rule, and the recorded results. Every screen is the real product.*
+
 ```
 profile ─▶ plan ─▶ generate patches ─▶ verify correctness ─▶ benchmark ─▶ accept / reject ─▶ repeat
           (AI)        (AI)              (harness)             (harness)     (harness)
