@@ -39,7 +39,8 @@ dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27", "build>=1.2", "ruff>=
 torch = ["torch>=2.2"]
 
 [project.urls]
-Homepage = "https://github.com/Nijjea1/hotpath"
+Homepage = "https://hotpath-five.vercel.app"
+Documentation = "https://hotpath-five.vercel.app/docs"
 Repository = "https://github.com/Nijjea1/hotpath"
 Issues = "https://github.com/Nijjea1/hotpath/issues"
 Changelog = "https://github.com/Nijjea1/hotpath/blob/main/CHANGELOG.md"

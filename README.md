@@ -2,6 +2,8 @@
 
 **An AI agent that makes your code faster and proves every change is correct.**
 
+[Website](https://hotpath-five.vercel.app) · [Docs](https://hotpath-five.vercel.app/docs) · [PyPI](https://pypi.org/project/hotpath-agent/) · `pipx install hotpath-agent`
+
 Point Hotpath at a repository. It profiles the code, asks a planner model for optimization
 hypotheses, has worker models write each one as a patch, and then runs every patch through a
 harness the models cannot touch: an isolated git worktree, the locked test suite, and a
