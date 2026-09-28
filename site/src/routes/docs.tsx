@@ -160,13 +160,14 @@ function Docs() {
 
           <Section id="install" eyebrow="Get started" title="Install">
             <p>Hotpath is a Python CLI. You need Python 3.11+ and Git; Docker and the GitHub <Mono>gh</Mono> CLI are optional.</p>
-            <Code>{`pipx install git+${REPO_URL}
+            <Code>{`pipx install hotpath-agent
 hotpath doctor          # Git, Docker, API keys, and the active accelerator`}</Code>
             <p>
-              <Mono>uv tool install git+{REPO_URL}</Mono> works too, as does cloning the repo and running{" "}
-              <Mono>hotpath.cmd</Mono> (Windows) or <Mono>./hotpath.sh</Mono>, which create a venv for you. Hotpath is not on
-              PyPI yet, and the <Mono>hotpath</Mono> name there belongs to an unrelated project — don&apos;t{" "}
-              <Mono>pip install hotpath</Mono>.
+              The package is <Mono>hotpath-agent</Mono>; the command it installs is <Mono>hotpath</Mono>. The{" "}
+              <Mono>hotpath</Mono> and <Mono>hotpath-ai</Mono> names on PyPI belong to unrelated projects.{" "}
+              <Mono>uv tool install hotpath-agent</Mono> works too. For the latest unreleased code,{" "}
+              <Mono>pipx install git+{REPO_URL}</Mono>, or clone the repo and run <Mono>hotpath.cmd</Mono> (Windows) or{" "}
+              <Mono>./hotpath.sh</Mono>, which create a venv for you.
             </p>
             <Table
               head={["You need", "For", "Without it"]}

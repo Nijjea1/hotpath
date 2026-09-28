@@ -1,0 +1,85 @@
+name: release
+
+# Push a tag like v0.1.0 to build, verify, publish to PyPI as `hotpath-agent`, and create the
+# GitHub Release. Publishing uses PyPI trusted publishing (OIDC): no API token is stored anywhere.
+# One-time setup on pypi.org: Account → Publishing → add a pending publisher for project
+# `hotpath-agent`, owner `Nijjea1`, repository `hotpath`, workflow `release.yml`, environment `pypi`.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:   # re-run a publish for an existing tag from the Actions tab
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # A release must be exactly the version it says it is, in both places the code declares it.
+      - name: Check the tag matches the package version
+        run: |
+          pkg=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          mod=$(python -c "import re;print(re.search(r'__version__ = \"([^\"]+)\"', open('hotpath/__init__.py').read()).group(1))")
+          tag="${GITHUB_REF_NAME#v}"
+          echo "tag=$tag pyproject=$pkg hotpath.__version__=$mod"
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$tag" != "$pkg" ]; then echo "::error::tag v$tag does not match pyproject version $pkg"; exit 1; fi
+          if [ "$pkg" != "$mod" ]; then echo "::error::pyproject version $pkg does not match hotpath.__version__ $mod"; exit 1; fi
+
+      - run: python -m pip install --upgrade pip build twine
+      - run: python -m build
+      - run: python -m twine check --strict dist/*
+
+      - name: Smoke-test the wheel outside the source tree
+        run: |
+          python -m venv /tmp/hp
+          /tmp/hp/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/hp/bin/hotpath --help
+          /tmp/hp/bin/hotpath doctor --json | python -c "import json,sys;v=json.load(sys.stdin)['hotpath'];print('doctor reports',v);assert v!='source checkout'"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/hotpath-agent/
+    permissions:
+      id-token: write   # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Create the release with the changelog entry as its notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          awk -v h="## [$ver]" 'index($0, h) == 1 {on=1; next} on && index($0, "## [") == 1 {exit} on {print}' CHANGELOG.md > notes.md
+          printf '\n---\nInstall: `pipx install hotpath-agent` (the command is `hotpath`).\n' >> notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --title "Hotpath $GITHUB_REF_NAME" --notes-file notes.md --verify-tag

@@ -84,7 +84,7 @@ def collect(*, verify_keys: bool = False) -> dict:
     docker_cli = bool(shutil.which("docker"))
     docker_ok, docker_detail = _command_version(["docker", "info", "--format", "{{.ServerVersion}}"])
     try:
-        package_version = version("hotpath")
+        package_version = version("hotpath-agent")  # the PyPI distribution; the command is `hotpath`
     except PackageNotFoundError:
         package_version = "source checkout"
     return {

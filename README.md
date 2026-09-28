@@ -27,15 +27,18 @@ all 214 tests green — in five minutes. [Details below](#it-has-done-this-to-a-
 ## Install
 
 ```bash
-pipx install git+https://github.com/Nijjea1/hotpath    # recommended: isolated, puts `hotpath` on PATH
-hotpath doctor                                          # Git, Docker, keys, and the active accelerator
+pipx install hotpath-agent       # recommended: isolated, puts the `hotpath` command on PATH
+hotpath doctor                   # Git, Docker, keys, and the active accelerator
 ```
+
+The package is **`hotpath-agent`**; the command it installs is **`hotpath`**. (The `hotpath` and
+`hotpath-ai` names on PyPI belong to unrelated projects, so don't `pip install` those.)
+`uv tool install hotpath-agent` works too. For the latest unreleased `main`:
+`pipx install git+https://github.com/Nijjea1/hotpath`, or clone and use the wrapper below.
 
 Python 3.11+ and Git are required; Docker is used when it is running (the isolation default for
 repositories you do not trust); `gh` is optional (without it Hotpath uses `GITHUB_TOKEN`, or prints a
-pre-filled pull-request link). Hotpath is **not on PyPI yet** — the `hotpath` name there belongs to an
-unrelated project, so do not `pip install hotpath`. `uv tool install git+https://github.com/Nijjea1/hotpath`
-works too, as does the clone-and-wrapper route below.
+pre-filled pull-request link).
 
 ## Run it on your own repository, in one command
 
@@ -480,4 +483,3 @@ worker-quality validation. Every recorded run, refusals included, is in
   provide a reliable nested time hierarchy for that metric.
 - Persist a profile per accepted experiment. `orchestrator` already profiles surviving beam nodes
   and discards the result, so any node could be diffed against baseline or its own parent for free.
-- Publish to PyPI under a free name (see [Install](#install)).

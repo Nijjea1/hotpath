@@ -1283,7 +1283,7 @@ function QuickstartSection() {
               <a href={README_URL} target="_blank" rel="noreferrer" className="bg-white/10 text-white px-7 py-4 rounded-xl font-medium hover:bg-white/20 transition-colors">README</a>
             </motion.div>
             <div className="rounded-xl border border-white/10 bg-[#0B0A0B] px-5 py-4 font-mono text-[13px] text-neutral-200 leading-relaxed overflow-x-auto">
-              <div><span className="text-neutral-500">$</span> pipx install git+{REPO_URL}</div>
+              <div><span className="text-neutral-500">$</span> pipx install hotpath-agent</div>
               <div><span className="text-neutral-500">$</span> hotpath go https://github.com/you/your-repo</div>
             </div>
           </div>

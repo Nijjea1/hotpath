@@ -6,23 +6,10 @@ lives in `docs/EVIDENCE_LEDGER.md`, not here.
 
 ## [Unreleased]
 
-### Added
-- `SECURITY.md`, `CONTRIBUTING.md`, this changelog, and GitHub issue / pull-request templates.
-- `ruff check` in CI, `make lint`, and `make test-fast` (skips tests marked `slow`).
-- The site's docs page lists every CLI command from a table that a test keeps in step with
-  `hotpath --help`, and the landing page shows the `jaraco/inflect` pull request next to the
-  TinyGPT H100 run.
-- `hotpath go` explains a missing prerequisite (no model key, no `gh`, no Docker) as a next step,
-  not a traceback.
+## [0.1.0] — 2026-09-28
 
-### Changed
-- README leads with a `pipx` install and says plainly that the `hotpath` name on PyPI is someone
-  else's project. Docs describe all nine `go` stages, including Verify.
-- Internal hackathon-era notes, audits, and runbooks are no longer published; user-facing docs moved to the site.
-
-## [0.1.0] — unreleased
-
-The first version that runs end to end on repositories nobody here wrote.
+The first release, and the first version that runs end to end on repositories nobody here wrote.
+Install with `pipx install hotpath-agent`; the command is `hotpath`.
 
 ### Added
 - **Harness:** isolated git worktrees with locked-path enforcement before any write; async
@@ -40,10 +27,16 @@ The first version that runs end to end on repositories nobody here wrote.
 - **Dashboard:** local-only FastAPI app with the experiment tree, metric-aware chart with a noise
   band, bottleneck diff with honest bounds, and exact rejection reasons.
 - **Observability:** optional Sentry traces, logs, and metrics; a no-op without a DSN.
+- **Docs:** the site's `/docs` page covers install, workflows, every command (generated from the
+  parser, with a test that fails on drift), the full config reference, troubleshooting, and an FAQ.
+  `SECURITY.md`, `CONTRIBUTING.md`, and issue / pull-request templates.
+- **Release:** published to PyPI as `hotpath-agent` from a tag-driven workflow using trusted
+  publishing; `ruff` in CI; `make test-fast` and `make lint`.
 
-### Fixed (found by live runs)
-- A CRLF checkout on Windows read as a dirty repository.
-- The worker's source budget was smaller than an ordinary module.
-- Committed benchmark files imported Hotpath and broke the target's CI collection.
-- Test dependencies declared in `setup.py` / `setup.cfg` were not detected.
-- Three `ciwatch` defects found against a real pull request.
+### Fixed
+- `hotpath go` no longer hangs without a terminal on Windows (the `NUL` device reports `isatty()`);
+  every stop names its stage and a next step, and an unexpected error does too instead of a traceback.
+- A key typed at the prompt is saved to `~/.hotpath/.env`, never the directory being optimized.
+- Found by live runs: a CRLF checkout read as a dirty repository; the worker's source budget was
+  smaller than an ordinary module; committed benchmark files imported Hotpath and broke the target's
+  CI; test dependencies in `setup.py` / `setup.cfg` were not detected; three `ciwatch` defects.

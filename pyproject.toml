@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hotpath"
+name = "hotpath-agent"
 version = "0.1.0"
 description = "An AI agent that makes code faster and proves every change is correct."
 readme = "README.md"
@@ -42,6 +42,7 @@ torch = ["torch>=2.2"]
 Homepage = "https://github.com/Nijjea1/hotpath"
 Repository = "https://github.com/Nijjea1/hotpath"
 Issues = "https://github.com/Nijjea1/hotpath/issues"
+Changelog = "https://github.com/Nijjea1/hotpath/blob/main/CHANGELOG.md"
 
 [project.scripts]
 hotpath = "hotpath.cli:main"
