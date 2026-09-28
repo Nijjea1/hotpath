@@ -388,7 +388,7 @@ def validate(worktree: Path, runner: Runner, *, timeout: float = 300, check_shar
     """Run the benchmark files already written into `worktree` and decide whether to trust them."""
     medians: list[float] = []
     noises: list[float] = []
-    for attempt in range(2):
+    for _attempt in range(2):
         res = runner(f"python {BENCH_FILE}", worktree, timeout)
         if res.timed_out:
             return Validation(False, f"the benchmark did not finish within {timeout:.0f}s; use a smaller input")

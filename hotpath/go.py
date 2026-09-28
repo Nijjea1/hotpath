@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import getpass
 import json
+import logging
 import os
 import re
 import shutil
@@ -32,7 +33,7 @@ from typing import Callable, Optional
 
 from hotpath import observability as obs
 from hotpath.assess import GENERATED_FILES, Assessment, assess
-from hotpath.config import CONFIG_NAMES, hotpath_home, load_config
+from hotpath.config import CONFIG_NAMES, hotpath_home, load_config, stdin_is_terminal
 from hotpath.schema import TERMINAL_STATUSES
 
 STAGES = ["Setup", "Fetch", "Assess", "Baseline", "Benchmark", "Configure", "Optimize", "Publish", "Verify"]
@@ -146,7 +147,7 @@ class Go:
                  ask: Optional[Callable[[str], str]] = None):
         self.o = opts
         self.out = out or self._emit
-        self.ask = ask if ask is not None else (input if sys.stdin.isatty() else None)
+        self.ask = ask if ask is not None else (input if stdin_is_terminal() else None)
         self.state = GoState()
         self.repo: Optional[Path] = None
         self.a: Optional[Assessment] = None
@@ -214,6 +215,7 @@ class Go:
         code = 0
         hold = False
         with obs.transaction("hotpath go", op="hotpath.go", target=self.o.target):
+            i = 0
             try:
                 for i, stage in enumerate([self.setup, self.fetch, self.assess, self.baseline, self.benchmark,
                                            self.configure, self.optimize, self.publish, self.verify], start=1):
@@ -222,7 +224,8 @@ class Go:
                 self.out(f"\ndone in {self._elapsed()}.")
                 hold = True
             except GoStop as e:
-                self.out(("\n" if not e.ok else "\n") + ("stopped: " if not e.ok else "") + str(e))
+                where = f"[{i}/{len(STAGES)}] {STAGES[i - 1]}" if i else "setup"
+                self.out("\n" + (f"stopped at {where}: " if not e.ok else "") + str(e))
                 code = 0 if e.ok else 1
                 # An honest non-result ("nothing beat the noise floor") is still worth reading on the
                 # dashboard — that is where the rejection reasons are.
@@ -230,6 +233,16 @@ class Go:
             except KeyboardInterrupt:
                 self.out("\ninterrupted; rerun with --resume to continue")
                 code = 130
+            except Exception as e:  # a bug, not a verdict: say where it happened and what to do next
+                obs.capture(e)
+                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                    raise
+                where = f"[{i}/{len(STAGES)}] {STAGES[i - 1]}" if i else "setup"
+                self.out(f"\nHotpath hit an unexpected error at {where}: {type(e).__name__}: {e}\n"
+                         "      next: rerun with `hotpath -v go ...` for the full traceback, or add --resume to\n"
+                         "            continue from the last completed stage, and please report it at\n"
+                         "            https://github.com/Nijjea1/hotpath/issues with that traceback.")
+                code = 1
             finally:
                 if hold:
                     self._summary()
@@ -326,17 +339,23 @@ class Go:
 
     def _ensure_key(self, name: str, label: str, where: str) -> None:
         if not os.environ.get(name):
+            env_file = hotpath_home() / ".env"
             if self.ask is None or self.o.yes:
-                raise GoStop(f"{name} is not set. Get a key at {where}, then `set {name}=...` "
-                             "(or put it in .env), or run offline with --provider mock")
+                setter = f"$env:{name}=\"...\"" if os.name == "nt" else f"export {name}=..."
+                raise GoStop(f"{name} is not set.\n"
+                             f"      next: get a key at {where}, then either\n"
+                             f"            {setter}   (this shell only), or\n"
+                             f"            add {name}=... to {env_file}   (every run)\n"
+                             f"      or try it offline with no key: hotpath go <repo> --provider mock")
             value = getpass.getpass(f"      {label} API key ({name}): ").strip()
             if not value:
-                raise GoStop(f"{name} is required")
+                raise GoStop(f"{name} is required (or run offline with --provider mock)")
             os.environ[name] = value
-            env_file = Path.cwd() / ".env"
+            # User-level, never the working directory: that may be someone's repository.
+            env_file.parent.mkdir(parents=True, exist_ok=True)
             with env_file.open("a", encoding="utf-8") as f:
                 f.write(f"\n{name}={value}\n")
-            self.info(f"saved {name} to {env_file} (git-ignored)")
+            self.info(f"saved {name} to {env_file}")
         if not self._key_works(name, None):
             raise GoStop(f"{name} was rejected by the API; check the key at {where}")
 
@@ -501,12 +520,20 @@ class Go:
         if mode == "auto":
             mode = "docker" if self.a.tier == 1 and docker_available() else "local"
             if mode == "local":
-                self.info("Docker is not running, so candidates run directly on this machine")
+                why = ("Docker is not running" if self.a.tier == 1
+                       else f"the Docker sandbox supports Tier 1 repositories only ({self.a.name} is Tier {self.a.tier})")
+                self.info(f"{why}, so candidates run directly on this machine")
                 if not self.confirm(f"Run {self.a.name}'s tests and model-written changes on this machine?"):
-                    raise GoStop("no consent to run locally. Start Docker Desktop, or rerun with "
-                                 "--sandbox local (or --yes)")
+                    raise GoStop("no consent to run the repository's code on this machine.\n"
+                                 "      next: start Docker (Docker Desktop, or the docker daemon; `docker info` should "
+                                 "succeed) and rerun,\n"
+                                 "            or, for a repository you trust, rerun with --sandbox local "
+                                 "(or --yes to accept every default)")
         elif mode == "docker" and not docker_available():
-            raise GoStop("--sandbox docker was requested, but Docker is not running")
+            raise GoStop("--sandbox docker was requested, but Docker is not reachable.\n"
+                         "      next: start Docker Desktop (or the docker daemon) until `docker info` succeeds, "
+                         "then rerun,\n"
+                         "            or use --sandbox local for a repository you trust (see SECURITY.md)")
         deps = list(self.a.dependencies)
         if "pytest" in self.test_cmd and not any(re.match(r"pytest\b", d) for d in deps):
             deps.append("pytest")
@@ -521,7 +548,7 @@ class Go:
                 if self.a.install_cmds:
                     run_install_cmds(self.repo, self.a.install_cmds, self.info)
         except SandboxError as e:
-            raise GoStop(str(e))
+            raise GoStop(str(e)) from e
         self.state.sandbox = mode
         self.runner = make_runner(self.tenv)
         if self.o.resume and "Optimize" in self._done_before() and self.state.setup_commit:
@@ -608,9 +635,9 @@ class Go:
             self.bench_seconds = r.duration_s
             try:
                 samples = [float(s) for s in parse_benchmark_output(r.stdout)["samples"]]
-            except (BenchmarkParseError, ValueError, TypeError):
+            except (BenchmarkParseError, ValueError, TypeError) as e:
                 raise GoStop(f"the benchmark `{choice.bench_cmd}` did not produce samples:\n"
-                             f"{(r.stdout + r.stderr)[-1500:]}")
+                             f"{(r.stdout + r.stderr)[-1500:]}") from e
             noise = benchgen.robust_noise(samples)
             choice.validation = benchgen.Validation(True, median_s=sorted(samples)[len(samples) // 2], noise=noise,
                                                     details=[f"noise {noise:.1%}"])
@@ -734,10 +761,10 @@ class Go:
         try:
             result = init_repo(self.repo, answers, force=False, workflow=True)
         except InitError as e:
-            raise GoStop(f"could not write the Hotpath config: {e}")
+            raise GoStop(f"could not write the Hotpath config: {e}") from e
         files = [p.relative_to(self.repo).as_posix() for p in result.written] + list(self.choice.files)
         _git(["add", "--", *dict.fromkeys(files)], self.repo)
-        body = [f"hotpath: set up benchmark, config, and verification check", "",
+        body = ["hotpath: set up benchmark, config, and verification check", "",
                 f"Benchmark: {self.choice.description}.",
                 f"Benchmark id: {self.choice.digest} (two runs with different ids measured different "
                 f"things, so their speedups are not comparable).",
@@ -916,7 +943,7 @@ class Go:
                           remote=self.o.remote, draft=not self.o.ready, push=push, method=self.pr_method,
                           say=self.info)
         except PRError as e:
-            raise GoStop(f"the pull request was not published: {e}")
+            raise GoStop(f"the pull request was not published: {e}") from e
         summary_file = self._state_dir() / "SUMMARY.md"
         body_file = self._ws.workdir / "prs" / f"{self._run.id}.md"
         if body_file.exists():

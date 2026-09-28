@@ -216,7 +216,7 @@ def pr_body(cfg: HotpathConfig, run: RunState, exps: list[Experiment], chain: li
             f"- **Correctness:** `{test_cmd}` passed on every shipped state. Hotpath cannot edit these paths: "
             + (", ".join(f"`{p}`" for p in rc.locked) or "_none configured_") + ".",
             f"- **Speed:** `{bench_cmd}`, compared against the parent with a bootstrap confidence interval.",
-            f"- **Scope:** only files matching " + ", ".join(f"`{p}`" for p in rc.editable) + " were changed.",
+            "- **Scope:** only files matching " + ", ".join(f"`{p}`" for p in rc.editable) + " were changed.",
             f"- **Attempts:** {len(exps)} candidates, {len(rejected)} rejected, "
             f"{sum(1 for e in exps if e.status == ExperimentStatus.accepted)} accepted.", ""]
 

@@ -1,0 +1,43 @@
+name: Bug report
+description: Hotpath crashed, refused something it should have run, or reported something wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problems (isolation escapes, locked-path bypasses, ways to sway a verdict) go through
+        [SECURITY.md](https://github.com/Nijjea1/hotpath/blob/main/SECURITY.md), not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and output
+      description: The exact command and the last lines of its output (remove keys and private paths).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`hotpath doctor --json`"
+      description: Credential booleans can stay; it never prints key values.
+      render: json
+  - type: input
+    id: version
+    attributes:
+      label: Hotpath version or commit
+      placeholder: "0.1.0 / 5aefa6b"
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Execution backend
+      options: [docker, local, "go --sandbox auto", not sure]
+  - type: input
+    id: target
+    attributes:
+      label: Target repository (if public)

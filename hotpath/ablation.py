@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from hotpath import observability as obs
 from hotpath.benchmark import compare, speedup_of
 from hotpath.harness import Harness
-from hotpath.schema import BenchmarkStats, Experiment, ExperimentStatus, HotpathConfig, RunState
+from hotpath.schema import Experiment, HotpathConfig, RunState
 from hotpath.store import Store
 from hotpath.workspace import PatchError, Workspace
 

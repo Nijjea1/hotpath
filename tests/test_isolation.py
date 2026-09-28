@@ -1,9 +1,7 @@
 import asyncio
 import os
-import shutil
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 from hotpath.execution import IsolationError, docker_create_args, execution_metadata, run_target, stage_source

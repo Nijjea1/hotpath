@@ -44,6 +44,6 @@ def test_dashboard_browser():
         "diff": {"comparable": False, "incomparable_reason": "No profile available"},
     }
     result = subprocess.run([node, str(Path(__file__).with_name("dashboard_browser.cjs"))],
-                            input=json.dumps(payload), text=True, capture_output=True,
+                            input=json.dumps(payload), text=True, encoding="utf-8", errors="replace", capture_output=True,
                             env={**os.environ, "HOTPATH_PLAYWRIGHT_MODULE": module}, timeout=45)
     assert result.returncode == 0, result.stdout + result.stderr

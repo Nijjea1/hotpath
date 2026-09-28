@@ -35,7 +35,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27", "build>=1.2"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27", "build>=1.2", "ruff>=0.15"]
 torch = ["torch>=2.2"]
 
 [project.urls]
@@ -55,3 +55,17 @@ server = ["static/*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["slow: end-to-end runs of the whole `go` flow (minutes); `make test-fast` skips them, CI runs them"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+# Fixture targets are excluded on purpose: their locked files and recorded mock patches must stay
+# byte-for-byte what the patches were written against.
+extend-exclude = ["site", "workspaces", "build", ".tmp", "submission", "demo_repo", "targets", "examples"]
+
+[tool.ruff.lint]
+# Correctness, not style: pyflakes, pycodestyle errors, bugbear, pylint errors, stale noqa.
+# The compact one-line `if x: return` / `a; b` idiom used throughout is deliberate (E701/E702).
+select = ["E4", "E7", "E9", "F", "W6", "B", "PLE", "RUF100"]
+ignore = ["E701", "E702", "E741"]

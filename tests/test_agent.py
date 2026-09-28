@@ -5,7 +5,6 @@ import pytest
 
 from fake_provider import FakeProvider
 from hotpath.agent import Agent, is_transient
-from hotpath.providers.base import PatchRequest
 from hotpath.providers.prompts import worker_messages
 from hotpath.schema import Edit, Experiment, ExperimentStatus, Hypothesis, PatchResponse, PlanResponse, ProfileSummary, RunState
 

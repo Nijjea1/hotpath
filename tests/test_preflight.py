@@ -4,12 +4,10 @@ Each test here is a real repository shape that cost ten minutes and, in two case
 before `go` gave up. The point of the command is that none of them should cost more than a second.
 """
 import subprocess
-import sys
 from pathlib import Path
 
-import pytest
 
-from hotpath.preflight import (Finding, declared_markers, estimate_cost, preflight,
+from hotpath.preflight import (declared_markers, estimate_cost, preflight,
                                property_tests_without_deadline)
 
 

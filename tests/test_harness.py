@@ -1,6 +1,5 @@
 """Every failure mode must become a structured status, never an exception out of run_experiment."""
 import asyncio
-from pathlib import Path
 
 import pytest
 

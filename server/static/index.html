@@ -382,7 +382,11 @@ $("#startBtn").onclick = async () => {
   try {
   const r = await fetch("/api/runs", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"});
   const j = await r.json();
-  if (!r.ok) { alert(j.detail || "could not start"); return; }
+  if (!r.ok) {
+    const el = $("#connectionError"); el.hidden = false;
+    el.textContent = "Could not start a run: " + (j.detail || r.status);
+    return;
+  }
   selectRun(j.run_id);
   } catch (e) { showError(e); }
 };
@@ -440,6 +444,8 @@ $("#chartMode").querySelectorAll("button").forEach(b => b.onclick = () => {
 
 function render() {
   const d = state.data; if (!d) return; const run = d.run;
+  // Without a config (`serve --db` alone) the server is read-only and refuses to start runs.
+  $("#startBtn").style.display = d.config ? "" : "none";
   $("#startBtn").disabled = !!d.live;
   $("#stopBtn").style.display = d.live ? "" : "none";
   renderPR(run, d.live);
@@ -447,7 +453,9 @@ function render() {
   $("#statusText").textContent = run ? (d.live ? `running · iteration ${run.iteration}/${run.total_iterations}` : run.status + (run.error ? " · " + run.error : "")) : "no run";
   if (!run) {
     $("#stats").innerHTML = ""; $("#tree").innerHTML = ""; $("#expTable tbody").innerHTML = "";
-    $("#detail").innerHTML = `<div class="empty">Start a run or select a stored run</div>`;
+    $("#detail").innerHTML = d.config
+      ? `<div class="empty">Start a run or select a stored run</div>`
+      : `<div class="empty">No runs in this database yet. This dashboard is read-only; start it with a config (<code>hotpath serve &lt;config&gt;</code>) to launch runs.</div>`;
     $("#contract").innerHTML = d.config ? `<div class="hint">Ready. Target: ${esc(d.config.target)}</div>` : "";
     $("#bottleneck").innerHTML = `<div class="hint">No run selected.</div>`;
     $("#profile").innerHTML = `<div class="hint">No run selected.</div>`;

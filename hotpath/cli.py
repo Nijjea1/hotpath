@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from hotpath import observability as obs
-from hotpath.config import ConfigNotFound, find_config, load_config, load_env_files
+from hotpath.config import ConfigNotFound, find_config, load_config, load_env_files, stdin_is_terminal
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -112,7 +112,7 @@ def cmd_init(args: argparse.Namespace) -> int:
              "editable": [x.strip() for x in args.editable.split(",") if x.strip()] if args.editable else None,
              "locked": args.lock, "execution": args.execution, "planner": args.planner, "worker": args.worker,
              "mock_patches_dir": args.mock_patches, "name": args.name}
-    interactive = not args.yes and sys.stdin.isatty()
+    interactive = not args.yes and stdin_is_terminal()
     try:
         answers, notes = gather_answers(repo, ask=ask if interactive else None, **given)
         result = init_repo(repo, answers, force=args.force, workflow=not args.no_workflow)
@@ -249,27 +249,28 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The whole CLI. `scripts/gen_site_commands.py` renders the site's command table from it."""
     p = argparse.ArgumentParser(prog="hotpath", description="AI proposes optimizations; Hotpath proves whether they work.")
     p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("doctor", help="check Git, Docker, credentials, and CUDA/ROCm/XPU/MPS availability")
-    d.add_argument("--json", action="store_true")
+    d.add_argument("--json", action="store_true", help="print the report as JSON")
     d.add_argument("--require-gpu", action="store_true",
                    help="fail unless PyTorch can use CUDA, ROCm, Intel XPU, or Apple MPS")
     d.add_argument("--verify-keys", action="store_true",
                    help="ask each model endpoint whether its key still works (a present key can be revoked)")
     d.set_defaults(fn=cmd_doctor)
     i = sub.add_parser("init", help="set a repository up for Hotpath (.hotpath.yaml + CI check)")
-    i.add_argument("path", nargs="?", default=".")
+    i.add_argument("path", nargs="?", default=".", help="repository to set up (default: the current directory)")
     i.add_argument("--test-cmd", help="command that checks correctness (exit 0 = correct)")
     i.add_argument("--bench-cmd", help="command that prints Hotpath benchmark JSON")
     i.add_argument("--profile-cmd", help="command that prints a Hotpath profile (optional)")
     i.add_argument("--editable", help="comma-separated globs Hotpath may edit (default: *.py, or src/*.py)")
     i.add_argument("--lock", action="append", default=[], help="an extra glob Hotpath must never edit (repeatable)")
     i.add_argument("--execution", choices=["local", "docker"], help="where candidate code runs")
-    i.add_argument("--planner", choices=["openai", "mock"])
-    i.add_argument("--worker", choices=["openai", "baseten", "mock"])
+    i.add_argument("--planner", choices=["openai", "mock"], help="model that proposes hypotheses")
+    i.add_argument("--worker", choices=["openai", "baseten", "mock"], help="model that writes each patch")
     i.add_argument("--mock-patches", help="directory of recorded patches for offline `--provider mock` runs")
     i.add_argument("--name", help="name shown in reports (default: the directory name)")
     i.add_argument("-y", "--yes", action="store_true", help="accept detected defaults without prompting")
@@ -279,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def pr_flags(sp: argparse.ArgumentParser) -> None:
         sp.add_argument("--base", help="branch the PR targets (default: the branch the run measured)")
-        sp.add_argument("--remote", default="origin")
+        sp.add_argument("--remote", default="origin", help="git remote to push the PR branch to (default: origin)")
         sp.add_argument("--draft", action="store_true", help="open the PR as a draft")
         sp.add_argument("--pr-method", choices=["auto", "gh", "token", "link"], default="auto",
                         help="how to open the PR: gh CLI, GITHUB_TOKEN, or a pre-filled link (auto tries them in order)")
@@ -294,9 +295,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="accept every default: local execution consent, the benchmark, and pushing the PR branch")
     g.add_argument("--provider", choices=["openai", "mock"], help="model provider (default: openai; mock is offline)")
     g.add_argument("--mock-patches", help="recorded patches for --provider mock")
-    g.add_argument("--iterations", type=int, default=3)
+    g.add_argument("--iterations", type=int, default=3, help="search iterations (default: 3)")
     g.add_argument("--candidates", type=int, default=3, help="candidates per iteration")
-    g.add_argument("--beam", type=int, default=1)
+    g.add_argument("--beam", type=int, default=1, help="beam width: accepted heads kept per iteration (1 = greedy)")
     g.add_argument("--max-tokens", type=int, help="stop the search once model calls have used this many tokens")
     g.add_argument("--max-minutes", type=float, help="stop the search after this many minutes")
     g.add_argument("--sandbox", choices=["auto", "local", "docker"], default="auto",
@@ -312,7 +313,8 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--test-runs", type=int, default=3, help="baseline test runs used to detect flaky tests")
     g.add_argument("--test-timeout", type=float, default=900.0, help="seconds per test-suite run")
     g.add_argument("--no-pr", action="store_true", help="build the PR branch locally but do not push")
-    g.add_argument("--pr-method", choices=["auto", "gh", "token", "link"], default="auto")
+    g.add_argument("--pr-method", choices=["auto", "gh", "token", "link"], default="auto",
+                   help="how to open the PR: gh CLI, GITHUB_TOKEN, or a pre-filled link (auto tries them in order)")
     g.add_argument("--ready", action="store_true", help="open the PR ready for review instead of as a draft")
     g.add_argument("--no-open", action="store_true", help="do not open the PR or dashboard in a browser")
     g.add_argument("--dashboard", action=argparse.BooleanOptionalAction, default=True,
@@ -323,27 +325,27 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--ci-attempts", type=int, default=2, help="how many times to try repairing CI")
     g.add_argument("--ci-timeout", type=float, default=900.0,
                    help="seconds to wait for CI checks to settle")
-    g.add_argument("--port", type=int, default=8765)
+    g.add_argument("--port", type=int, default=8765, help="dashboard port (default: 8765)")
     g.add_argument("--workspaces", help="where clones and per-repo environments live (default: ./workspaces)")
-    g.add_argument("--remote", default="origin")
+    g.add_argument("--remote", default="origin", help="git remote to push the PR branch to (default: origin)")
     g.add_argument("--resume", action="store_true", help="continue the last `go` run on this repository")
     g.set_defaults(fn=cmd_go)
     c = sub.add_parser("check", help="preflight a repository in seconds: what would stop a run, and what it "
                                     "would cost (exit 0 go, 1 caution, 2 stop)")
-    c.add_argument("path", nargs="?", default=".")
-    c.add_argument("--json", action="store_true")
+    c.add_argument("path", nargs="?", default=".", help="local path or GitHub URL (default: the current directory)")
+    c.add_argument("--json", action="store_true", help="print the findings as JSON")
     c.add_argument("--iterations", type=int, default=3, help="iterations to price the estimate for")
     c.add_argument("--candidates", type=int, default=3, help="candidates per iteration to price for")
     c.set_defaults(fn=cmd_check)
 
     s0 = sub.add_parser("assess", help="read-only report: ecosystem, tests, benchmark, editable and locked files")
-    s0.add_argument("path", nargs="?", default=".")
-    s0.add_argument("--json", action="store_true")
+    s0.add_argument("path", nargs="?", default=".", help="repository to inspect (default: the current directory)")
+    s0.add_argument("--json", action="store_true", help="print the report as JSON")
     s0.set_defaults(fn=cmd_assess)
 
     r = sub.add_parser("run", help="run the optimization loop once")
     r.add_argument("config", nargs="?", help="config file (default: the nearest .hotpath.yaml)")
-    r.add_argument("--iterations", type=int)
+    r.add_argument("--iterations", type=int, help="override search.iterations from the config")
     r.add_argument("--beam", type=int, help="beam width: how many accepted heads to keep and expand each iteration (1 = greedy)")
     r.add_argument("--provider", choices=["mock", "openai"], help="override both planner and worker providers")
     r.add_argument("--export", help="directory to write the best accepted source tree into")
@@ -363,14 +365,14 @@ def main(argv: list[str] | None = None) -> int:
     pr_flags(q)
     q.set_defaults(fn=cmd_pr)
     s = sub.add_parser("serve", help="serve the dashboard (and allow starting runs from it)")
-    s.add_argument("config", nargs="?")
+    s.add_argument("config", nargs="?", help="config file; without one (and with --db) the dashboard is read-only")
     s.add_argument("--db", help="database path (defaults to the config's)")
-    s.add_argument("--host", default="127.0.0.1")
-    s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--host", default="127.0.0.1", help="loopback address to bind (non-loopback is refused)")
+    s.add_argument("--port", type=int, default=8765, help="port (default: 8765)")
     s.set_defaults(fn=cmd_serve)
     a = sub.add_parser("ablate", help="re-measure the accepted chain with each change removed")
-    a.add_argument("config", nargs="?")
-    a.add_argument("--run-id")
+    a.add_argument("config", nargs="?", help="config file (default: the nearest .hotpath.yaml)")
+    a.add_argument("--run-id", help="which run to ablate (defaults to the latest)")
     a.add_argument("--json", help="write the report here")
     a.add_argument("--prune", action="store_true",
                    help="also try dropping every change that did not pull its weight, together; keep the pruned "
@@ -384,7 +386,11 @@ def main(argv: list[str] | None = None) -> int:
     x.add_argument("--prune", action="store_true",
                    help="ablate, then export the pruned stack instead of the head if pruning is verified (implies --ablate)")
     x.set_defaults(fn=cmd_export)
-    args = p.parse_args(argv)
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     _setup_logging(args.verbose)
     load_env_files()
     try:

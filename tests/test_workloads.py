@@ -16,9 +16,10 @@ CFG = BenchmarkConfig(required_workloads=IDS, min_workload_retention=0.98,
 
 def _output(ids=IDS, values=None):
     values = values or [[100.0, 101.0, 99.0], [200.0, 201.0, 199.0]]
+    # strict=False on purpose: the malformed cases below pass fewer ids than values (a missing workload).
     return json.dumps({"hotpath_benchmark": 1, "metric": "tokens_per_s", "higher_is_better": True,
                        "samples": [140.0, 141.0, 139.0],
-                       "workloads": [{"id": wid, "samples": samples} for wid, samples in zip(ids, values)]})
+                       "workloads": [{"id": wid, "samples": samples} for wid, samples in zip(ids, values, strict=False)]})
 
 
 def test_required_matrix_is_parsed_and_persistable():

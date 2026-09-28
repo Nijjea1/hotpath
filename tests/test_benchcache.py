@@ -14,7 +14,7 @@ import json
 
 import pytest
 
-from hotpath.benchcache import CACHE_FORMAT, BenchmarkCache, CachedWorkload, slug
+from hotpath.benchcache import CACHE_FORMAT, BenchmarkCache, slug
 from hotpath.benchgen import BenchChoice, bench_files, workload_digest
 
 WORKLOAD = "def workload():\n    return sum(i * i for i in range(1000))\n"

@@ -18,3 +18,20 @@ targets/*/.git/
 
 # `hotpath go` clones and per-repo environments
 workspaces/
+
+# Internal notes, audits, runbooks and plans: kept locally, not published.
+# The user-facing docs are README, SECURITY, CONTRIBUTING, CHANGELOG, docs/{GO,ISOLATION,PLATFORMS,
+# PULL_REQUESTS,EVIDENCE_LEDGER}.md, and the site's /docs page.
+CLAUDE.md
+RELEASE_STATUS.md
+docs/history/
+docs/internal/
+docs/BASETEN.md
+docs/BASETEN_HANDOFF.md
+docs/DEMO.md
+docs/GPU_TROUBLESHOOTING.md
+docs/H100_RUNBOOK.md
+docs/H100_WORKSTATION_SETUP.md
+docs/IMPLEMENTATION_CONTRACT.md
+docs/SENTRY.md
+docs/SENTRY_MOMENTS.md

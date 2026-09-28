@@ -15,33 +15,50 @@ profile ─▶ plan ─▶ generate patches ─▶ verify correctness ─▶ ben
           (AI)        (AI)              (harness)             (harness)     (harness)
 ```
 
+**Proof, not a promise:** Hotpath opened [Nijjea1/inflect#1](https://github.com/Nijjea1/inflect/pull/1)
+against a repository nobody here wrote — a bare URL in, a draft pull request out, 1.472x faster with
+all 214 tests green — in five minutes. [Details below](#it-has-done-this-to-a-repository-nobody-here-wrote).
+
+## Install
+
+```bash
+pipx install git+https://github.com/Nijjea1/hotpath    # recommended: isolated, puts `hotpath` on PATH
+hotpath doctor                                          # Git, Docker, keys, and the active accelerator
+```
+
+Python 3.11+ and Git are required; Docker is used when it is running (the isolation default for
+repositories you do not trust); `gh` is optional (without it Hotpath uses `GITHUB_TOKEN`, or prints a
+pre-filled pull-request link). Hotpath is **not on PyPI yet** — the `hotpath` name there belongs to an
+unrelated project, so do not `pip install hotpath`. `uv tool install git+https://github.com/Nijjea1/hotpath`
+works too, as does the clone-and-wrapper route below.
+
 ## Run it on your own repository, in one command
 
 ```bash
-git clone https://github.com/Nijjea1/hotpath && cd hotpath
+hotpath go https://github.com/you/your-repo         # after the pipx install above
 
+# or, without installing anything globally:
+git clone https://github.com/Nijjea1/hotpath && cd hotpath
 hotpath.cmd https://github.com/you/your-repo        # Windows
 ./hotpath.sh https://github.com/you/your-repo       # macOS / Linux
-
-# Diagnose Git, Docker, credentials, PyTorch, and the active accelerator.
-hotpath doctor
 ```
 
-The wrapper creates `.venv`, installs Hotpath, and runs `hotpath go`: it clones your repo, works out how
-to test and benchmark it, checks the baseline is green and not flaky, runs the search, and opens a
-**draft pull request** with one commit per verified change. The live dashboard opens in your browser
+`hotpath go` (the wrappers create `.venv`, install Hotpath into it, and run it) clones your repo, works
+out how to test and benchmark it, checks the baseline is green and not flaky, runs the search, opens a
+**draft pull request** with one commit per verified change, and then watches the repository's own CI. The live dashboard opens in your browser
 while the search runs, and the pull request opens when it is done — neither needs asking for. Nothing
 is pushed without your confirmation, and never to the default branch.
 
 ```
-[1/8] Setup ......... Python 3.12 ✓  git ✓  gh ✓  keys ✓ (workers on Baseten)
-[2/8] Fetch ......... cloned into workspaces/you__your-repo @ a1b2c3d, PR base main (you have push access)
-[3/8] Assess ........ python (Python), Tier 1 · tests: `python -m pytest -q` · no benchmark (one will be generated)
-[4/8] Baseline ...... local · 412 passed · 3/3 runs green, not flaky · 38.2s each
-[5/8] Benchmark ..... generated: parses 5,000 records through parse_records and rollup
-[6/8] Configure ..... setup commit 9f0c11ab on hotpath-setup/20260920-101500
-[7/8] Optimize ...... 11 candidates · 2 accepted · 3.41x vs baseline
-[8/8] Publish ....... https://github.com/you/your-repo/pull/42 (draft)
+[1/9] Setup ....... Python 3.12 ✓  git ✓  gh ✓  keys ✓ (workers on Baseten)
+[2/9] Fetch ....... cloned into workspaces/you__your-repo @ a1b2c3d, PR base main (you have push access)
+[3/9] Assess ...... python (Python), Tier 1 · tests: `python -m pytest -q` · no benchmark (one will be generated)
+[4/9] Baseline .... local · 412 passed · 3/3 runs green, not flaky · 38.2s each
+[5/9] Benchmark ... generated: parses 5,000 records through parse_records and rollup
+[6/9] Configure ... setup commit 9f0c11ab on hotpath-setup/20260920-101500
+[7/9] Optimize .... 11 candidates · 2 accepted · 3.41x vs baseline
+[8/9] Publish ..... https://github.com/you/your-repo/pull/42 (draft)
+[9/9] Verify ...... CI green - 6 passed
 
 done in 6m 12s.
 
@@ -129,7 +146,8 @@ are real wins, measured live on your machine.
 ## Quick start (no API keys needed)
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+git clone https://github.com/Nijjea1/hotpath && cd hotpath
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 
 # Run the full loop on the bundled slow demo repo using the offline mock provider.
@@ -141,8 +159,11 @@ hotpath serve configs/demo_repo.yaml      # http://127.0.0.1:8765
 # Re-measure the accepted chain with each change removed.
 hotpath ablate configs/demo_repo.yaml
 
-pytest -q
+python -m pytest -q        # or `make test`; `make test-fast` skips the slow end-to-end loops
 ```
+
+Contributing? Read [`CONTRIBUTING.md`](CONTRIBUTING.md) — in particular why pytest must run from the
+interpreter Hotpath is installed into.
 
 Host and accelerator support (CUDA, ROCm, Intel XPU, Apple MPS, CPU, and Docker device
 passthrough) is documented in [`docs/PLATFORMS.md`](docs/PLATFORMS.md). Hotpath can write a custom
@@ -152,7 +173,7 @@ must retain a correct fallback and pass the locked correctness and workload gate
 The bundled demo configs explicitly select `execution.backend: local` because the
 bundled target is trusted and is intended to run as a quick smoke test. For arbitrary
 repositories, use the default Docker backend with a reviewed, pinned runner image. See
-[`docs/DEMO.md`](docs/DEMO.md) and [`docs/ISOLATION.md`](docs/ISOLATION.md).
+[`docs/ISOLATION.md`](docs/ISOLATION.md).
 
 The Docker-backed CPU demo run `run_59dd5582d2` on 2026-09-18 accepted one measured
 change at 1.363× and rejected another for failing correctness. The run records its
@@ -228,7 +249,7 @@ fast model explores": one planner call per iteration, N worker calls in parallel
 
 ### Sentry setup
 
-The complete setup and validation boundary is in [`docs/SENTRY.md`](docs/SENTRY.md).
+Sentry is optional: leave `SENTRY_DSN` empty and telemetry is off.
 The repository tests use an in-memory transport; live ingestion and visibility still
 require a DSN and a check in the target Sentry project.
 
@@ -328,7 +349,8 @@ JSON lines yourself. See `configs/torch_transformer.yaml` for the GPU shape.
 hotpath/
   schema.py         Pydantic models: config, experiment tree, model I/O, measurements   (shared)
   workspace.py      git worktrees, locked-path enforcement, search/replace patching     (harness)
-  runner.py         async subprocesses with hard timeouts                              (harness)
+  runner.py         async subprocesses with hard timeouts and process-tree cleanup     (harness)
+  execution.py      fail-closed local / Docker execution backends                      (harness)
   benchmark.py      parsing, stats, bootstrap CI, the accept/reject decision            (harness)
   profiler.py       profile JSON -> compact summary                                     (harness)
   harness.py        run_experiment: patch -> test -> bench -> decision; QuietLock       (harness)
@@ -338,35 +360,29 @@ hotpath/
   providers/        Provider protocol; openai (structured outputs) and mock (replay)    (agent)
   orchestrator.py   the search loop and run state                                       (both)
   store.py          SQLite persistence                                                  (both)
-  observability.py  Sentry spans/transactions, no-op without a DSN                        (both)
-  profilediff.py    before/after bottleneck diff over two ProfileSummary records          (agent)
+  observability.py  Sentry spans/transactions, no-op without a DSN                      (both)
+  profilediff.py    before/after bottleneck diff over two ProfileSummary records        (agent)
+  go.py             the nine-stage guided flow (docs/GO.md)                            (product)
+  assess.py         static detection: ecosystem, tests, benchmark, editable vs locked  (product)
+  preflight.py      `hotpath check`: blockers, cautions, cost estimate                 (product)
+  doctor.py         `hotpath doctor`: git, Docker, keys, accelerator                   (product)
+  sandbox.py        per-target venv / Docker runner image                              (product)
+  benchgen.py       generate a benchmark from the test suite's hot paths, then run it  (product)
+  init.py / pr.py / github.py / ciwatch.py   .hotpath.yaml, PR publishing, CI verify   (product)
+  export.py         PR-ready bundle: tree, diff, benchmark table, ablation             (product)
   benchlib.py       helpers for target benchmark scripts (perf_counter / CUDA events)
   profilelib.py     helpers for target profile scripts (cProfile / torch.profiler)
-  cli.py            hotpath run | serve | ablate
+  cli.py            doctor | init | go | check | assess | run | pr | serve | ablate | export
 server/             FastAPI API + single-file dashboard, reads the same SQLite store
   views.py          derived view models: tree layout, retry links, beam membership, chart series
+site/               the project website (Vite + TanStack Start, deployed on Vercel)
 demo_repo/          slow Python target + locked tests + recorded mock patches
-targets/torch_transformer/   Dryft-style GPU target (tokens/sec, frozen reference model)
-configs/            demo_repo.yaml, demo_repo_openai.yaml, torch_transformer.yaml
-tests/              Tests cover: patch isolation, benchmark decision, every failure mode,
-                    state persistence, the full loop, the API, Sentry envelopes,
-                    the bottleneck diff's refusals and bounds, tree/chart derivations,
-                    and `go` end to end (clone -> benchmark -> search -> pushed branch)
+examples/           slow_textstats: an offline `hotpath go` target and its recorded patches
+targets/            slow_web_analytics (second offline target), torch_transformer (GPU, tokens/sec)
+configs/            demo, beam, OpenAI, Baseten, torch_transformer, and Dryft configs
+docs/               GO, PULL_REQUESTS, ISOLATION, PLATFORMS, EVIDENCE_LEDGER
+tests/              every failure mode, the full loop, the API, `go` end to end, and more
 ```
-
-## Working on it as two people
-
-The contracts in `schema.py` are the seam. One person owns the harness side, the other the
-agent and product side; neither waits on the other because the mock provider stands in for
-models and the tests/ fixtures stand in for a target.
-
-- **Harness owner**: `workspace.py`, `runner.py`, `benchmark.py`, `profiler.py`, `harness.py`,
-  `ablation.py`, `benchlib.py`, `profilelib.py`, and the targets. Success = every failure mode
-  becomes a structured status, every number is defensible.
-- **Agent/product owner**: `context.py`, `agent.py`, `providers/`, `store.py`, `server/`,
-  `observability.py`, `profilediff.py`. Success = the planner gets compact, relevant context; the
-  dashboard shows exactly what happened and why, and never claims more than was measured.
-- **Shared, change together**: `schema.py`, `orchestrator.py`, `configs/`.
 
 ## What is real and what is not
 
@@ -377,9 +393,10 @@ model. Its three reports record 1.460x, 1.379x, and 1.468x aggregate tokens/sec 
 The artifact's own README identifies its workstation as an H100, but these checked-in files
 do not independently attest the host, driver, or environment. Treat the numbers as recorded
 TinyGPT evidence until a new run captures that machine record and Dryft's official target.
-The Baseten handoff also records a CPU `demo_repo` run using its worker endpoint; it is not
-a current GPU worker-quality validation. See [`docs/DEMO.md`](docs/DEMO.md),
-[`docs/H100_RUNBOOK.md`](docs/H100_RUNBOOK.md), and [`docs/ISOLATION.md`](docs/ISOLATION.md).
+A CPU `demo_repo` run has also used a Baseten worker endpoint; it is not a current GPU
+worker-quality validation. Every recorded run, refusals included, is in
+[`docs/EVIDENCE_LEDGER.md`](docs/EVIDENCE_LEDGER.md); the isolation model is in
+[`docs/ISOLATION.md`](docs/ISOLATION.md).
 
 - Every number in the dashboard is read from SQLite rows written by the harness. There are no
   placeholder values or hardcoded success states.
@@ -391,8 +408,7 @@ a current GPU worker-quality validation. See [`docs/DEMO.md`](docs/DEMO.md),
   median throughput on every shape. The real Dryft model, its official correctness test, and
   a hardware-attested rerun remain required for a Dryft claim.
 - The OpenAI provider uses the `beta.chat.completions.parse` structured-output API.
-  Historical live calls are documented in `AUDIT.md`; the current worker changes need
-  a fresh live check with an operator key.
+  The current worker changes need a fresh live check with an operator key.
 
 ## Beyond the MVP (now built)
 
@@ -459,4 +475,4 @@ a current GPU worker-quality validation. See [`docs/DEMO.md`](docs/DEMO.md),
   provide a reliable nested time hierarchy for that metric.
 - Persist a profile per accepted experiment. `orchestrator` already profiles surviving beam nodes
   and discards the result, so any node could be diffed against baseline or its own parent for free.
-- `hotpath export` opening the PR directly via `gh` when a remote is configured.
+- Publish to PyPI under a free name (see [Install](#install)).

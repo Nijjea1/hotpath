@@ -1,6 +1,5 @@
 """`hotpath go`: the guided flow end to end (offline: the mock provider replays patches; everything
 else, from cloning to the pushed PR branch, is real)."""
-import os
 import re
 import shutil
 import subprocess
@@ -59,6 +58,7 @@ def test_parse_target():
         parse_target("not a target")
 
 
+@pytest.mark.slow
 def test_go_end_to_end_pushes_a_verified_branch_with_the_setup_commit_first(tmp_path):
     remote = make_remote(tmp_path)
     code, out = run_go(opts(tmp_path, remote.as_uri(), yes=True))
@@ -86,6 +86,7 @@ def test_go_end_to_end_pushes_a_verified_branch_with_the_setup_commit_first(tmp_
     assert git(remote, "rev-list", "--count", "main") == "1"
 
 
+@pytest.mark.slow
 def test_go_never_pushes_without_confirmation(tmp_path):
     remote = make_remote(tmp_path)
     asked = []
@@ -103,6 +104,7 @@ def test_go_never_pushes_without_confirmation(tmp_path):
         assert any("Push branch" in q for q in asked) and "built locally" in out
 
 
+@pytest.mark.slow
 def test_go_without_a_terminal_or_yes_asks_nothing_and_changes_nothing(tmp_path):
     remote = make_remote(tmp_path)
     code, out = run_go(opts(tmp_path, remote.as_uri(), yes=False), ask=None)
@@ -110,6 +112,7 @@ def test_go_without_a_terminal_or_yes_asks_nothing_and_changes_nothing(tmp_path)
     assert git(remote, "branch", "--list", "hotpath/*") == ""
 
 
+@pytest.mark.slow
 def test_go_falls_back_to_timing_the_test_suite(tmp_path):
     def drop_benchmark(src: Path):
         (src / "bench.py").unlink()
@@ -122,6 +125,7 @@ def test_go_falls_back_to_timing_the_test_suite(tmp_path):
     assert "coarse" in out
 
 
+@pytest.mark.slow
 def test_go_stops_on_failing_baseline_tests(tmp_path):
     def break_it(src: Path):
         p = src / "textstats" / "core.py"
@@ -132,6 +136,7 @@ def test_go_stops_on_failing_baseline_tests(tmp_path):
     assert "[5/9]" not in out
 
 
+@pytest.mark.slow
 def test_go_detects_flaky_tests(tmp_path):
     counter = tmp_path / "count.txt"
 
@@ -158,7 +163,8 @@ def test_go_refuses_local_execution_without_consent(tmp_path):
         code, out = run_go(o, ask=None)
     finally:
         sandbox.docker_available = orig
-    assert code == 1 and "no consent to run locally" in out
+    assert code == 1 and "no consent to run the repository's code on this machine" in out
+    assert "stopped at [4/9] Baseline" in out and "--sandbox local" in out, "a stop must name the stage and the way on"
 
 
 def test_local_baseline_runner_uses_tree_safe_process_runner(tmp_path, monkeypatch):
@@ -182,6 +188,7 @@ def test_local_baseline_runner_uses_tree_safe_process_runner(tmp_path, monkeypat
                     "env": {"VIRTUAL_ENV": "test"}, "output_limit": 1048576}
 
 
+@pytest.mark.slow
 def test_go_on_a_local_checkout_restores_the_users_branch(tmp_path):
     remote = make_remote(tmp_path)
     src = tmp_path / "src"
@@ -244,6 +251,7 @@ def fake_dashboard(monkeypatch):
     return servers, opened
 
 
+@pytest.mark.slow
 def test_dashboard_is_served_and_opened_without_being_asked(tmp_path, fake_dashboard):
     servers, opened = fake_dashboard
     remote = make_remote(tmp_path)
@@ -257,6 +265,7 @@ def test_dashboard_is_served_and_opened_without_being_asked(tmp_path, fake_dashb
     assert f"dashboard: http://127.0.0.1:{o.port}  (still running)" in out
 
 
+@pytest.mark.slow
 def test_dashboard_survives_the_run_when_a_terminal_can_stop_it(tmp_path, fake_dashboard):
     servers, _ = fake_dashboard
     remote = make_remote(tmp_path)
@@ -268,6 +277,7 @@ def test_dashboard_survives_the_run_when_a_terminal_can_stop_it(tmp_path, fake_d
     assert "Ctrl-C to stop the dashboard." in out
 
 
+@pytest.mark.slow
 def test_dashboard_does_not_block_without_a_terminal(tmp_path, fake_dashboard):
     servers, _ = fake_dashboard
     remote = make_remote(tmp_path)
@@ -279,6 +289,7 @@ def test_dashboard_does_not_block_without_a_terminal(tmp_path, fake_dashboard):
     assert "reopen it later with: hotpath serve" in out
 
 
+@pytest.mark.slow
 def test_no_dashboard_and_no_open_are_honoured(tmp_path, fake_dashboard):
     servers, opened = fake_dashboard
     remote = make_remote(tmp_path)

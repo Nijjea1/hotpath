@@ -302,7 +302,9 @@ def test_crlf_checkout_is_not_reported_as_dirty(tmp_path):
 
     repo = tmp_path / "repo"
     repo.mkdir()
-    plain = lambda *a: subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True, check=True)
+    def plain(*a):
+        return subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True, check=True)
+
     plain("init", "-q", "-b", "main")
     plain("config", "user.name", "t")
     plain("config", "user.email", "t@t")

@@ -4,6 +4,7 @@ from pathlib import Path
 import hashlib
 import os
 import re
+import sys
 
 import yaml
 from urllib.parse import urlsplit, urlunsplit
@@ -74,6 +75,26 @@ def find_config(start: str | Path | None = None) -> Path:
 
 def hotpath_home() -> Path:
     return Path(os.environ.get("HOTPATH_HOME") or (Path.home() / ".hotpath"))
+
+
+def stdin_is_terminal() -> bool:
+    """True only when a person could answer a prompt.
+
+    `isatty()` alone is not enough on Windows: the NUL device (`< NUL`, `< /dev/null` under Git Bash,
+    many CI runners) is a character device, so it reports True, and a prompt such as `getpass` then
+    waits forever on a console nobody is typing into. There, ask the console itself."""
+    try:
+        if sys.stdin is None or not sys.stdin.isatty():
+            return False
+        if os.name != "nt":
+            return True
+        import ctypes
+        import msvcrt
+        mode = ctypes.c_ulong()
+        handle = msvcrt.get_osfhandle(sys.stdin.fileno())
+        return bool(ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(mode)))
+    except (AttributeError, OSError, ValueError):
+        return False
 
 
 def load_env_files() -> list[Path]:

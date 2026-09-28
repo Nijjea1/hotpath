@@ -249,7 +249,8 @@ def inspect(gh: Gh, head_sha: str, base_sha: str, *, timeout_s: float = 900,
             say: Callable[[str], None] = lambda _m: None) -> Verdict:
     """Wait for the head's checks, then judge them against the base commit's."""
     if not gh.available:
-        return Verdict(unavailable="the gh CLI is not available, so CI could not be read")
+        return Verdict(unavailable="the gh CLI is not available, so CI could not be read; install it from "
+                                   "https://cli.github.com and run `gh auth login` to have Hotpath check CI")
     head_checks, timed_out = wait_for_checks(gh, head_sha, timeout_s=timeout_s, say=say)
     if head_checks is None:
         return Verdict(unavailable="GitHub's check-runs API could not be read, so CI is unknown")

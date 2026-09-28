@@ -30,6 +30,9 @@ import {
   STATUS_LABEL,
   RUN,
   REPORT_URL,
+  REAL_PR,
+  REFUSALS,
+  LEDGER_URL,
 } from "../data/hotpath";
 import type { Experiment } from "../data/hotpath";
 import LoopDiagram from "../components/charts/LoopDiagram";
@@ -363,6 +366,7 @@ function Index() {
       {/* Funnel + results */}
       <FunnelSection />
       <ResultsSection />
+      <RealRepoSection />
 
       {/* Quickstart */}
       <QuickstartSection />
@@ -387,7 +391,7 @@ function Index() {
               {[
                 { l: "View on GitHub", h: REPO_URL },
                 { l: "Read the README", h: README_URL },
-                { l: "The demo script", h: DEMO_URL },
+                { l: "Guided run (hotpath go)", h: DEMO_URL },
               ].map((item) => (
                 <motion.a key={item.l} href={item.h} target="_blank" rel="noreferrer" className="text-base font-medium text-neutral-100 cursor-pointer hover:opacity-70 transition-opacity inline-flex items-center gap-1.5" variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }} transition={{ duration: 0.5, ease: "easeOut" }}>
                   {item.l} <Icon path={ICONS.arrowUpRight} size={15} />
@@ -1168,6 +1172,80 @@ function ResultsSection() {
   );
 }
 
+/* ------------------------------------------------------- a repository nobody here wrote */
+
+function RealRepoSection() {
+  const pr = REAL_PR;
+  return (
+    <section id="real-repo" className="bg-black max-w-7xl mx-auto px-5 py-20 scroll-mt-20">
+      <div className="flex flex-col gap-6 mb-12 max-w-3xl">
+        <Eyebrow>A real repository, a real pull request</Eyebrow>
+        <WordsReveal as="h2" className="text-4xl lg:text-5xl leading-tight text-white" text="A bare URL in. A verified pull request out." step={0.04} />
+        <p className="text-xl opacity-60 text-neutral-100 leading-8 max-w-[680px]">
+          The run above is a stand-in model we wrote. This one is not: <span className="font-mono text-[0.9em]">hotpath go</span>{" "}
+          against <span className="font-mono text-[0.9em]">{pr.upstream}</span>, a library nobody here wrote, with no human step
+          between the URL and the draft PR — {pr.wallClock}.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <StatTile value={<>{pr.speedup.toFixed(3)}×</>} label="vs baseline, 2 changes shipped" color="text-emerald-400" delay={0} />
+        <StatTile value={`${pr.accepted} / ${pr.candidates}`} label="candidates accepted" color="text-neutral-100" delay={0.08} />
+        <StatTile value={pr.tests} label="existing tests, all green" color="text-neutral-100" delay={0.16} />
+        <StatTile value={pr.ci.introduced} label="CI failures introduced (follow-up PR #2)" color="text-blue-300" delay={0.24} />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ChartPanel>
+          <div className="flex items-center justify-between mb-5">
+            <Eyebrow>The pull request</Eyebrow>
+            <FigTag>measured · {pr.date}</FigTag>
+          </div>
+          <div className="space-y-2 font-mono text-[13px]">
+            {pr.commits.map(([sha, msg]) => (
+              <div key={sha} className="flex gap-3">
+                <span style={{ color: "#d9662f" }}>{sha}</span>
+                <span className="text-neutral-300">{msg}</span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-5 text-sm text-neutral-400 leading-relaxed">
+            One commit per verified change, each the exact tree the harness tested. The benchmark was{" "}
+            {pr.benchmark}, declared noisy at {pr.noise} — which <span className="text-neutral-200">raised</span> the
+            acceptance bar to {pr.bar}. The accepted head measured {pr.headCi.point}× with a 95% CI of [{pr.headCi.lo},{" "}
+            {pr.headCi.hi}]. Planner {pr.planner}, worker {pr.worker}, {pr.tokens.toLocaleString("en-US")} tokens across{" "}
+            {pr.modelCalls} calls.
+          </p>
+          <p className="mt-3 text-sm text-neutral-400 leading-relaxed">
+            PR #1 failed the repository&apos;s CI — our committed benchmark imported Hotpath, which that CI does not have. That was fixed; on the follow-up PR the repository&apos;s own CI read {pr.ci.passed} passed, {pr.ci.preExisting} already failing on
+            the base, {pr.ci.unknown} with no base result to compare, and {pr.ci.introduced} introduced. &ldquo;0
+            introduced&rdquo; means no failure was shown to be ours — not that every check is green.
+          </p>
+          <div className="flex flex-wrap gap-3 mt-5">
+            <a href={pr.url} target="_blank" rel="noreferrer" className="bg-white text-black px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-neutral-200 transition-colors">Open {pr.label}</a>
+            <a href={LEDGER_URL} target="_blank" rel="noreferrer" className="bg-white/10 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-white/20 transition-colors">Evidence ledger</a>
+          </div>
+        </ChartPanel>
+        <ChartPanel>
+          <div className="flex items-center justify-between mb-5">
+            <Eyebrow>And where it refused</Eyebrow>
+            <FigTag>no number is also a result</FigTag>
+          </div>
+          <div className="space-y-5">
+            {REFUSALS.map((r) => (
+              <div key={r.repo}>
+                <div className="flex items-baseline gap-3">
+                  <span className="font-mono text-[14px] text-neutral-100">{r.repo}</span>
+                  <span className="text-xs uppercase tracking-wider text-red-300">{r.outcome}</span>
+                </div>
+                <p className="mt-1.5 text-sm text-neutral-400 leading-relaxed">{r.why}</p>
+              </div>
+            ))}
+          </div>
+        </ChartPanel>
+      </div>
+    </section>
+  );
+}
+
 /* ------------------------------------------------------------ the loop diagram */
 
 function FrameworkSection() {
@@ -1198,12 +1276,16 @@ function QuickstartSection() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
           <div className="flex flex-col gap-8">
             <span className="text-xs font-semibold uppercase tracking-[0.25em] text-neutral-500">§ 04 — quickstart</span>
-            <WordsReveal as="h2" className="text-5xl lg:text-6xl leading-tight text-white" text="Any repo with a test and a benchmark." step={0.07} duration={0.6} />
-            <WordsReveal as="p" className="text-2xl opacity-60 text-neutral-100 max-w-[520px]" text="One small config file: the command that proves it's correct, the command that times it, what the agent may edit, and what it must never touch." step={0.03} delay={0.3} duration={0.5} />
+            <WordsReveal as="h2" className="text-5xl lg:text-6xl leading-tight text-white" text="Any repo with a test suite." step={0.07} duration={0.6} />
+            <WordsReveal as="p" className="text-2xl opacity-60 text-neutral-100 max-w-[520px]" text="No benchmark? Hotpath writes one over your hottest functions and validates it by running it. Or bring one config file: the command that proves it's correct, the command that times it, what the agent may edit, and what it must never touch." step={0.03} delay={0.3} duration={0.5} />
             <motion.div className="flex gap-3" initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-80px" }} transition={{ duration: 0.6, delay: 0.8, ease: "easeOut" }}>
               <Link to="/docs" className="bg-white text-black px-7 py-4 rounded-xl font-medium hover:bg-neutral-200 transition-colors">Read the docs</Link>
               <a href={README_URL} target="_blank" rel="noreferrer" className="bg-white/10 text-white px-7 py-4 rounded-xl font-medium hover:bg-white/20 transition-colors">README</a>
             </motion.div>
+            <div className="rounded-xl border border-white/10 bg-[#0B0A0B] px-5 py-4 font-mono text-[13px] text-neutral-200 leading-relaxed overflow-x-auto">
+              <div><span className="text-neutral-500">$</span> pipx install git+{REPO_URL}</div>
+              <div><span className="text-neutral-500">$</span> hotpath go https://github.com/you/your-repo</div>
+            </div>
           </div>
 
           <motion.div className="rounded-3xl border border-white/10 overflow-hidden flex flex-col" style={{ backgroundColor: "#141110" }} initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-100px" }} transition={{ duration: 0.7, delay: 0.2, ease: "easeOut" }}>

@@ -119,7 +119,7 @@ def test_branch_has_one_verified_commit_per_change(finished):
     assert len(plan.commits) == 2
     shas = git(repo, "rev-list", "--reverse", f"{run.base_commit}..{plan.branch}").splitlines()
     assert shas == [sha for sha, _ in plan.commits]
-    for sha, e in zip(shas, chain):
+    for sha, e in zip(shas, chain, strict=True):
         # Byte-for-byte the tree the harness tested and benchmarked.
         assert git(repo, "rev-parse", f"{sha}^{{tree}}") == git(repo, "rev-parse", f"{e.commit}^{{tree}}")
         msg = git(repo, "log", "-1", "--format=%B", sha)

@@ -74,7 +74,13 @@ def test_inspect_says_so_when_gh_is_missing(monkeypatch):
 def test_inspect_reports_a_repository_without_ci(monkeypatch):
     gh = Gh(RepoRef("github.com", "o", "r"), binary="gh")
     monkeypatch.setattr(Gh, "checks_for_ref", lambda self, ref: [])
+    # An empty result must hold for the whole settle window before it is believed; a fake clock
+    # exercises that wait without spending a real minute in it.
+    clock = [0.0]
+    monkeypatch.setattr("hotpath.ciwatch.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("hotpath.ciwatch.time.sleep", lambda s: clock.__setitem__(0, clock[0] + s))
     v = inspect(gh, "head", "base")
+    assert clock[0] >= 45, "the empty result was believed before it had settled"
     assert "no CI checks are configured" in v.unavailable
     assert not v.green, "no CI is not the same as passing CI"
 

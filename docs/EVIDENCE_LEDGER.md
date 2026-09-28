@@ -5,6 +5,22 @@ environment. Do not replace a number here with a dashboard screenshot alone;
 retain the report, target revision, correctness output, config, and machine
 record that produced it.
 
+## What version 0.1 claims
+
+- The accept/reject harness, search, ablation, export, PR publishing, and the nine-stage `go` flow,
+  as exercised by the automated test suite and cross-platform CI.
+- One live `hotpath go` pull request against a third-party repository
+  ([Nijjea1/inflect#1](https://github.com/Nijjea1/inflect/pull/1), 1.472x), and honest refusals on two
+  others, as recorded below.
+
+## What version 0.1 does not claim
+
+- A result on Dryft's model, or on any GPU other than the recorded TinyGPT runs.
+- The CI repair loop fixing a real introduced failure (its control flow is tested; it has not fired live).
+- Sentry events appearing in a Sentry project UI (delivery is tested; visibility needs a human check).
+- Worker quality for a given model endpoint (no keyed comparison has been run since the worker changes).
+- The four-shape GPU workload matrix executed on a PyTorch host.
+
 ## Baseline before the A/B completion work
 
 - Repository revision: `cd757f0` on `main`.

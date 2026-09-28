@@ -11,14 +11,15 @@ The wrapper creates `.venv`, installs Hotpath into it, and runs `hotpath go`. No
 `owner/repo`, any git URL, or a path to a local checkout work as the target too.
 
 ```
-[1/8] Setup ......... Python 3.12 ✓  git ✓  gh ✓  keys ✓ (workers on Baseten)
-[2/8] Fetch ......... cloned into workspaces/you__your-repo @ a1b2c3d, PR base main (you have push access)
-[3/8] Assess ........ python (Python), Tier 1 · tests: `python -m pytest -q` · no benchmark (one will be generated)
-[4/8] Baseline ...... local · 412 passed · 3/3 runs green, not flaky · 38.2s each
-[5/8] Benchmark ..... generated: parses 5,000 records through parse_records and rollup
-[6/8] Configure ..... setup commit 9f0c11ab on hotpath-setup/20260920-101500
-[7/8] Optimize ...... 11 candidates · 2 accepted · 3.41x vs baseline
-[8/8] Publish ....... https://github.com/you/your-repo/pull/42 (draft)
+[1/9] Setup ....... Python 3.12 ✓  git ✓  gh ✓  keys ✓ (workers on Baseten)
+[2/9] Fetch ....... cloned into workspaces/you__your-repo @ a1b2c3d, PR base main (you have push access)
+[3/9] Assess ...... python (Python), Tier 1 · tests: `python -m pytest -q` · no benchmark (one will be generated)
+[4/9] Baseline .... local · 412 passed · 3/3 runs green, not flaky · 38.2s each
+[5/9] Benchmark ... generated: parses 5,000 records through parse_records and rollup
+[6/9] Configure ... setup commit 9f0c11ab on hotpath-setup/20260920-101500
+[7/9] Optimize .... 11 candidates · 2 accepted · 3.41x vs baseline
+[8/9] Publish ..... https://github.com/you/your-repo/pull/42 (draft)
+[9/9] Verify ...... CI green - 6 passed
 ```
 
 Every stage either finishes or stops with the reason and what to do about it.
@@ -48,9 +49,15 @@ all visible in the source the whole time:
 ## What each stage does
 
 **1. Setup.** Checks Python ≥3.11 and git; finds how to open a PR (`gh` → `GITHUB_TOKEN` → a pre-filled
-link); checks whether Docker is running; asks for `OPENAI_API_KEY` once and saves it to a git-ignored
-`.env` (Baseten workers are used automatically when `BASETEN_API_KEY` is set). `--provider mock` runs
-offline with recorded patches and needs no keys.
+link); checks whether Docker is running; asks for `OPENAI_API_KEY` once and saves it to `~/.hotpath/.env` —
+never into the directory you ran from (Baseten workers are used automatically when `BASETEN_API_KEY` is
+set). Without a terminal (a script, CI, `< /dev/null`) it never prompts: it stops and prints how to set
+the key. `--provider mock` runs offline with recorded patches and needs no keys.
+
+Every stop names its stage and the way on, for example
+`stopped at [4/9] Baseline: --sandbox docker was requested, but Docker is not reachable` followed by a
+`next:` line. An unexpected error does the same instead of printing a traceback; `hotpath -v go ...`
+shows the traceback.
 
 **2. Fetch.** Clones into `workspaces/`, or uses a local checkout as-is (refusing a dirty one, and
 restoring your branch afterwards). Records the default branch and the exact commit the run will measure.
@@ -110,7 +117,8 @@ after one confirmation (`--yes` skips it). `--no-pr` builds the branch locally i
 opens in your browser, and the dashboard keeps serving until you press Ctrl-C:
 
 ```
-[8/8] Publish ....... https://github.com/you/your-repo/pull/42 (draft)
+[8/9] Publish ..... https://github.com/you/your-repo/pull/42 (draft)
+[9/9] Verify ...... CI green - 6 passed
 
 done in 6m 12s.
 
@@ -122,6 +130,22 @@ done in 6m 12s.
 
 Without a terminal attached — a script, a CI job — nothing blocks: the run prints how to reopen the
 dashboard and exits.
+
+**9. Verify.** A verified speedup that turns someone's CI red is not a finished job, so after the pull
+request is pushed Hotpath waits for the repository's own CI (`--ci-timeout`, in seconds) and judges every
+failing check against the base commit:
+
+| Verdict | Meaning | What Hotpath does |
+| --- | --- | --- |
+| passed | green on the PR head | nothing |
+| introduced by this PR | passes on the base, fails on the PR | feeds the failing log to a worker, runs the fix through the same harness (locked tests, benchmark), pushes only if accepted; at most `--ci-attempts` times |
+| already failing on the base | red upstream too | reports it, never touches it |
+| no base result to compare | the base has no run for that check | reports it as unknown, never claims it is fine |
+
+"0 introduced" means no failure was shown to be this PR's, not that every check is green.
+`--no-verify-ci` skips the stage. The repair loop's safety properties are tested (a rejected fix is never
+pushed, the attempt budget bounds it, CI is re-read rather than assumed), but it has not yet been observed
+repairing a real introduced failure — see `docs/EVIDENCE_LEDGER.md`.
 
 ## Where the target's code runs
 
@@ -164,5 +188,5 @@ docker` requires the container.
 - Candidate code runs in a container, or locally only with explicit consent.
 - The agent can never edit tests, benchmarks, CI, or `.hotpath.yaml`: enforced in code before a byte is
   written, re-checked before publishing, and re-checked again by the CI workflow on GitHub's machines.
-- Keys live in a git-ignored `.env` and never enter containers, commits, or model prompts.
+- Keys live in your environment or `~/.hotpath/.env` and never enter containers, commits, or model prompts.
 - Nothing is pushed without a confirmation, and never to the default branch.

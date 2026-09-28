@@ -203,7 +203,7 @@ def setup_py_requirements(source: str) -> tuple[list[str], list[str]]:
         if isinstance(node, ast.keyword) and node.arg == "install_requires":
             install += strings(node.value)
         elif isinstance(node, ast.Dict):
-            for key, value in zip(node.keys, node.values):
+            for key, value in zip(node.keys, node.values, strict=True):
                 if isinstance(key, ast.Constant) and isinstance(key.value, str) \
                         and key.value.strip().lower() in _TEST_EXTRAS:
                     extras += strings(value)

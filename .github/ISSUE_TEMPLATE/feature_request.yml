@@ -1,0 +1,19 @@
+name: Feature request
+description: Something Hotpath should do, or a kind of repository it should handle.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Hotpath to do?
+  - type: textarea
+    id: evidence
+    attributes:
+      label: How would we know it worked?
+      description: Hotpath only ships what it can measure. What evidence would show the feature is correct?

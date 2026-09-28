@@ -18,7 +18,7 @@ def run(fn: Callable[[], object], *, top: int = 30, repeat: int = 1, root: str |
     st = pstats.Stats(pr)
     total = st.total_tt or 1e-12
     rows = []
-    for (file, line, func), (cc, nc, tt, ct, _callers) in st.stats.items():
+    for (file, line, func), (_cc, nc, tt, ct, _callers) in st.stats.items():
         if os.path.isabs(file):
             af = os.path.abspath(file)
             if not af.startswith(root + os.sep):

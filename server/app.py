@@ -166,7 +166,7 @@ def create_app(cfg: HotpathConfig | None = None, db_path: str | None = None) -> 
             run_cfg = HotpathConfig.model_validate(data)
             orch = Orchestrator(run_cfg, store=store)
         except (OSError, ValueError, RuntimeError) as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
         state["orch"] = orch
         state["task"] = asyncio.create_task(orch.execute())
         return {"run_id": orch.run.id}
@@ -198,7 +198,7 @@ def create_app(cfg: HotpathConfig | None = None, db_path: str | None = None) -> 
             record = await asyncio.to_thread(publish, run_cfg, store, run, ws, base=req.base, draft=req.draft,
                                              say=messages.append)
         except PRError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
         finally:
             state["publishing"] = False
         return {"pull_request": record.model_dump(mode="json"), "log": messages}
